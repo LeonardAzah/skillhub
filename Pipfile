@@ -10,6 +10,7 @@ djangorestframework-simplejwt = "*"
 psycopg2-binary = "*"
 python-decouple = "*"
 django-filter = "*"
+google-auth = "*"
 
 [dev-packages]
 
