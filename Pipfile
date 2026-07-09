@@ -11,6 +11,9 @@ psycopg2-binary = "*"
 python-decouple = "*"
 django-filter = "*"
 google-auth = "*"
+argon2-cffi = "*"
+django-cors-headers = "*"
+requests = "*"
 
 [dev-packages]
 
