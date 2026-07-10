@@ -8,6 +8,11 @@ from .auth import (
 
 )
 
+from .email_verification import (
+    VerifyEmailView,
+    ResendVerificationView,
+)
+
 __all__ = [
     'RegisterView',
     'LoginView',
@@ -15,4 +20,6 @@ __all__ = [
     'MeView',
     'TokenRefreshView',
     'GoogleAuthView',
+    'VerifyEmailView',
+    'ResendVerificationView',
 ]

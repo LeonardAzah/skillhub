@@ -1,0 +1,18 @@
+{% extends "email/base.html" %}
+{% block content %}
+<div class="hero">
+  <div class="icon">✅</div>
+  <h1>Identity verified!</h1>
+  <p class="sub">Your account is now fully activated.</p>
+</div>
+<div class="body">
+  <p>Hi <strong>{{ user.username }}</strong>,</p>
+  <p>Great news — your identity has been successfully verified on BoloConnect. You now have full access to all platform features.</p>
+  <div class="alert alert-success">
+    Your verified badge is now displayed on your profile, building trust with everyone you work with on the platform.
+  </div>
+  <div class="btn-wrap">
+    <a href="{{ frontend_url|default:"#" }}/dashboard" class="btn">Go to my dashboard</a>
+  </div>
+</div>
+{% endblock %}

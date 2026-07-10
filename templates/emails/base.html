@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block subject %}BoloConnect{% endblock %}</title>
+    <style>
+      body,
+      table,
+      td,
+      a {
+        -webkit-text-size-adjust: 100%;
+        -ms-text-size-adjust: 100%;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        background: #f4f4f5;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+          Arial, sans-serif;
+      }
+      .wrapper {
+        width: 100%;
+        background: #f4f4f5;
+        padding: 32px 16px;
+      }
+      .card {
+        max-width: 560px;
+        margin: 0 auto;
+        background: #fff;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      }
+      .header {
+        background: #0f172a;
+        padding: 24px 32px;
+        text-align: center;
+      }
+      .logo {
+        font-size: 22px;
+        font-weight: 700;
+        color: #fff;
+        letter-spacing: -0.3px;
+      }
+      .logo span {
+        color: #22c55e;
+      }
+      .hero {
+        padding: 28px 32px 0;
+        text-align: center;
+      }
+      .hero .icon {
+        font-size: 40px;
+        line-height: 1;
+        margin-bottom: 12px;
+      }
+      .hero h1 {
+        margin: 0 0 6px;
+        font-size: 20px;
+        font-weight: 600;
+        color: #0f172a;
+        line-height: 1.3;
+      }
+      .hero .sub {
+        margin: 0;
+        font-size: 14px;
+        color: #64748b;
+        line-height: 1.5;
+      }
+      .body {
+        padding: 24px 32px;
+        font-size: 15px;
+        line-height: 1.6;
+        color: #334155;
+      }
+      .body p {
+        margin: 0 0 16px;
+      }
+      .body p:last-child {
+        margin-bottom: 0;
+      }
+      .btn-wrap {
+        text-align: center;
+        margin: 28px 0;
+      }
+      .btn {
+        display: inline-block;
+        padding: 13px 28px;
+        background: #22c55e;
+        color: #fff !important;
+        font-size: 15px;
+        font-weight: 600;
+        text-decoration: none;
+        border-radius: 8px;
+      }
+      .btn-dark {
+        background: #0f172a;
+      }
+      .btn-red {
+        background: #ef4444;
+      }
+      .info-box {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 16px 20px;
+        margin: 20px 0;
+        font-size: 14px;
+        color: #334155;
+      }
+      .row {
+        display: flex;
+        justify-content: space-between;
+        padding: 5px 0;
+        border-bottom: 1px solid #e2e8f0;
+      }
+      .row:last-child {
+        border-bottom: none;
+      }
+      .lbl {
+        color: #64748b;
+      }
+      .val {
+        font-weight: 500;
+        color: #0f172a;
+      }
+      .amount {
+        font-size: 28px;
+        font-weight: 700;
+        color: #0f172a;
+        text-align: center;
+        margin: 20px 0;
+      }
+      .green {
+        color: #16a34a;
+      }
+      .red {
+        color: #dc2626;
+      }
+      .alert {
+        border-radius: 8px;
+        padding: 14px 18px;
+        margin: 20px 0;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      .alert-warn {
+        background: #fffbeb;
+        border: 1px solid #fcd34d;
+        color: #78350f;
+      }
+      .alert-danger {
+        background: #fef2f2;
+        border: 1px solid #fca5a5;
+        color: #7f1d1d;
+      }
+      .alert-success {
+        background: #f0fdf4;
+        border: 1px solid #86efac;
+        color: #14532d;
+      }
+      .alert-info {
+        background: #eff6ff;
+        border: 1px solid #93c5fd;
+        color: #1e3a5f;
+      }
+      .divider {
+        border: none;
+        border-top: 1px solid #e2e8f0;
+        margin: 24px 0;
+      }
+      .footer {
+        padding: 20px 32px 28px;
+        text-align: center;
+        font-size: 12px;
+        color: #94a3b8;
+        line-height: 1.6;
+      }
+      .footer a {
+        color: #64748b;
+        text-decoration: underline;
+      }
+      .fallback {
+        word-break: break-all;
+        font-size: 12px;
+        color: #94a3b8;
+        text-align: center;
+        margin-top: 12px;
+      }
+      .fallback a {
+        color: #64748b;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrapper">
+      <div class="card">
+        <div class="header">
+          <div class="logo">Bolo<span>Connect</span></div>
+        </div>
+        {% block content %}{% endblock %}
+        <div class="footer">
+          <p>
+            You're receiving this because you have a BoloConnect account.<br />
+            © {% now "Y" %} BoloConnect. All rights reserved.
+          </p>
+          <p>
+            <a href="#">Privacy Policy</a> &nbsp;·&nbsp; <a href="#">Terms</a>
+          </p>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

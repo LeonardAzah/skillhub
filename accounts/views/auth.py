@@ -9,6 +9,10 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from ..models import User, EmailVerificationToken, DeviceToken
 from ..serializers import (RegisterSerializer, UserSummarySerializer, LogoutSerializer, GoogleAuthSerializer)
 
+from notifications.emails import EmailService
+
+
+
 class RegisterView(APIView):
     """
     POST /api/v1/auth/register
@@ -22,6 +26,14 @@ class RegisterView(APIView):
         serializer.is_valid(raise_exception=True)
         user: User = serializer.save()
 
+        EmailService.send_email(
+    subject="Welcome to SkillHub",
+    recipient=user.email,
+    template_name="emails/welcome.html",
+    context={
+        "user": user,
+    },
+)
         return Response(
             {
                 "success": True,

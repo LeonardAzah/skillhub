@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     'django_filters',
 
     'accounts',
+    'notifications',
 ]
 
 MIDDLEWARE = [
@@ -132,11 +133,11 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": "100/hour",
         "user": "1000/hour",
-        # SRS §4.5 — Login rate limiting: 3 attempts per 15 minutes per IP
+        # Login rate limiting: 3 attempts per 15 minutes per IP
         "login": "3/15min",
         "password_reset": "5/hour",
     },
-    # "EXCEPTION_HANDLER": "utils.exceptions.custom_exception_handler",
+    "EXCEPTION_HANDLER": "utils.exceptions.custom_exception_handler",
 }
 
 
@@ -203,3 +204,20 @@ ACCOUNT_LOCKOUT_DURATION = 30         # Minutes
 LOGIN_RATE_LIMIT_ATTEMPTS = 3         # Per IP per 15 min
 EMAIL_VERIFICATION_EXPIRY_HOURS = 24  
 PASSWORD_RESET_EXPIRY_HOURS = 1 
+
+
+
+# Email
+from decouple import config
+
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False
+
+EMAIL_HOST_USER = config("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD")
+
+DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL")

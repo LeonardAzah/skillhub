@@ -1,0 +1,24 @@
+{% extends "email/base.html" %} {% block content %}
+<div class="hero">
+  <div class="icon">✅</div>
+  <h1>Withdrawal processed</h1>
+  <p class="sub">Your funds are on their way.</p>
+</div>
+<div class="body">
+  <p>Hi <strong>{{ user.username }}</strong>,</p>
+  <p>
+    Your withdrawal has been processed and the funds have been sent to your
+    account.
+  </p>
+  <div class="amount green">{{ amount }} {{ currency|default:"XAF" }}</div>
+  <div class="info-box">
+    <div class="row">
+      <span class="lbl">Method</span><span class="val">{{ method|title }}</span>
+    </div>
+    <div class="row">
+      <span class="lbl">Transaction ID</span
+      ><span class="val">{{ transaction_id|truncatechars:12 }}</span>
+    </div>
+  </div>
+</div>
+{% endblock %}

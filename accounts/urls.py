@@ -5,7 +5,9 @@ from .views import (
        LoginView,
        LogoutView,
        MeView,TokenRefreshView,
-       GoogleAuthView
+       GoogleAuthView,
+       VerifyEmailView,
+       ResendVerificationView
  
 )
 
@@ -16,6 +18,10 @@ urlpatterns = [
     path("/auth/token/refresh", TokenRefreshView.as_view(), name="token-refresh"),
     path("/auth/me", MeView.as_view(), name="auth-me"),
     path("/auth/google", GoogleAuthView.as_view(), name="auth-google"),
+
+    # Email Verification
+    path("auth/verify-email/<uuid:token>", VerifyEmailView.as_view(), name="verify-email"),
+    path("auth/resend-verification", ResendVerificationView.as_view(), name="resend-verification"),
 
 
 

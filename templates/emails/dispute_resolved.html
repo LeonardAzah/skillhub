@@ -1,0 +1,53 @@
+{% extends "email/base.html" %} {% block content %}
+<div class="hero">
+  <div class="icon">⚖️</div>
+  <h1>Dispute resolved</h1>
+  <p class="sub">
+    {% if resolution == "refund_seeker" %}Full refund issued to the seeker. {%
+    elif resolution == "release_provider" %}Payment released to the provider. {%
+    else %}Payment split between both parties.{% endif %}
+  </p>
+</div>
+<div class="body">
+  <p>Hi there,</p>
+  <p>
+    Our team has reviewed the dispute for the appointment below and reached a
+    decision.
+  </p>
+
+  <div class="info-box">
+    <div class="row">
+      <span class="lbl">Service</span><span class="val">{{ category }}</span>
+    </div>
+    <div class="row">
+      <span class="lbl">Date</span><span class="val">{{ scheduled_date }}</span>
+    </div>
+    <div class="row">
+      <span class="lbl">Time</span><span class="val">{{ scheduled_time }}</span>
+    </div>
+    <div class="row">
+      <span class="lbl">Location</span
+      ><span class="val">{{ location_address }}</span>
+    </div>
+    <div class="row">
+      <span class="lbl">Amount</span
+      ><span class="val">{{ quoted_price }} XAF</span>
+    </div>
+  </div>
+  <div class="info-box">
+    <div class="row">
+      <span class="lbl">Outcome</span>
+      <span class="val">
+        {% if resolution == "refund_seeker" %}Refunded to seeker {% elif
+        resolution == "release_provider" %}Released to provider {% else %}Split
+        ({{ split_percent_seeker }}% to seeker){% endif %}
+      </span>
+    </div>
+  </div>
+  {% if resolution_notes %}
+  <div class="alert alert-info">
+    <strong>Admin notes:</strong> {{ resolution_notes }}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

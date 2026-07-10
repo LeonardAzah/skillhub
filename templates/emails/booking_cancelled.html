@@ -1,0 +1,45 @@
+{% extends "email/base.html" %} {% block content %}
+<div class="hero">
+  <div class="icon">🚫</div>
+  <h1>Booking cancelled</h1>
+  <p class="sub">Cancelled by {{ cancelled_by|default:"a party" }}.</p>
+</div>
+<div class="body">
+  <p>Hi there,</p>
+  <p>
+    The following appointment has been cancelled{% if reason %} for the reason:
+    <em>{{ reason }}</em>{% endif %}.
+  </p>
+
+  <div class="info-box">
+    <div class="row">
+      <span class="lbl">Service</span><span class="val">{{ category }}</span>
+    </div>
+    <div class="row">
+      <span class="lbl">Date</span><span class="val">{{ scheduled_date }}</span>
+    </div>
+    <div class="row">
+      <span class="lbl">Time</span><span class="val">{{ scheduled_time }}</span>
+    </div>
+    <div class="row">
+      <span class="lbl">Location</span
+      ><span class="val">{{ location_address }}</span>
+    </div>
+    <div class="row">
+      <span class="lbl">Amount</span
+      ><span class="val">{{ quoted_price }} XAF</span>
+    </div>
+  </div>
+  {% if cancelled_by == "provider" %}
+  <div class="alert alert-info">
+    Since the provider cancelled, your full payment has been refunded to your
+    BoloConnect wallet.
+  </div>
+  {% else %}
+  <div class="alert alert-info">
+    Your refund has been processed according to our cancellation policy and
+    credited to your wallet.
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends "email/base.html" %}
+{% block content %}
+<div class="hero">
+  <div class="icon">⚠️</div>
+  <h1>Withdrawal unsuccessful</h1>
+  <p class="sub">Your funds have been returned to your wallet.</p>
+</div>
+<div class="body">
+  <p>Hi <strong>{{ user.username }}</strong>,</p>
+  <p>Unfortunately your withdrawal could not be processed. Your funds have been returned to your BoloConnect wallet.</p>
+  <div class="amount red">{{ amount }} {{ currency|default:"XAF" }}</div>
+  {% if reason %}
+  <div class="alert alert-danger">
+    <strong>Reason:</strong> {{ reason }}
+  </div>
+  {% endif %}
+  <div class="btn-wrap">
+    <a href="{{ frontend_url|default:"#" }}/wallet" class="btn btn-dark">Try again</a>
+  </div>
+</div>
+{% endblock %}

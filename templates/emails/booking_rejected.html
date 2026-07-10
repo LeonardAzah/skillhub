@@ -1,0 +1,24 @@
+{% extends "email/base.html" %}
+{% block content %}
+<div class="hero">
+  <div class="icon">❌</div>
+  <h1>Booking declined</h1>
+  <p class="sub">Your payment has been refunded.</p>
+</div>
+<div class="body">
+  <p>Hi there,</p>
+  <p>Unfortunately <strong>{{ provider_name|default:"the provider" }}</strong> was unable to accept your booking request. Your payment has been refunded in full to your BoloConnect wallet.</p>
+
+<div class="info-box">
+  <div class="row"><span class="lbl">Service</span><span class="val">{{ category }}</span></div>
+  <div class="row"><span class="lbl">Date</span><span class="val">{{ scheduled_date }}</span></div>
+  <div class="row"><span class="lbl">Time</span><span class="val">{{ scheduled_time }}</span></div>
+  <div class="row"><span class="lbl">Location</span><span class="val">{{ location_address }}</span></div>
+  <div class="row"><span class="lbl">Amount</span><span class="val">{{ quoted_price }} XAF</span></div>
+</div>
+  <p>Don't worry — there are many other verified providers available. Book a new appointment today.</p>
+  <div class="btn-wrap">
+    <a href="{{ frontend_url|default:"#" }}/providers/search?category={{ category }}" class="btn">Find another provider</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "email/base.html" %}
+{% block content %}
+<div class="hero">
+  <div class="icon">🔔</div>
+  <h1>Admin alert</h1>
+  <p class="sub">{{ title }}</p>
+</div>
+<div class="body">
+  <p>{{ body }}</p>
+  {% if appointment_id %}
+  <div class="info-box">
+    <div class="row"><span class="lbl">Appointment</span><span class="val">{{ appointment_id|truncatechars:12 }}</span></div>
+    {% if dispute_id %}
+    <div class="row"><span class="lbl">Dispute</span><span class="val">{{ dispute_id|truncatechars:12 }}</span></div>
+    {% endif %}
+    {% if seeker_id %}
+    <div class="row"><span class="lbl">Seeker</span><span class="val">{{ seeker_id|truncatechars:12 }}</span></div>
+    {% endif %}
+    {% if provider_id %}
+    <div class="row"><span class="lbl">Provider</span><span class="val">{{ provider_id|truncatechars:12 }}</span></div>
+    {% endif %}
+  </div>
+  {% endif %}
+  <div class="btn-wrap">
+    <a href="{{ frontend_url|default:"#" }}/admin" class="btn btn-dark">Open admin panel</a>
+  </div>
+</div>
+{% endblock %}

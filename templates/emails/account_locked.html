@@ -1,0 +1,24 @@
+{% extends "email/base.html" %} {% block content %}
+<div class="hero">
+  <div class="icon">🚫</div>
+  <h1>Account temporarily locked</h1>
+  <p class="sub">Too many failed login attempts.</p>
+</div>
+<div class="body">
+  <p>Hi <strong>{{ user.username }}</strong>,</p>
+  <p>
+    Your BoloConnect account has been temporarily locked after
+    <strong>{{ lockout_minutes|default:30 }} minutes</strong> due to too many
+    failed login attempts.
+  </p>
+  <div class="alert alert-warn">
+    Your account will unlock automatically. If this wasn't you, reset your
+    password immediately.
+  </div>
+  <div class="btn-wrap">
+    <a href="{{ frontend_url }}/auth/password/reset/" class="btn btn-dark"
+      >Reset my password</a
+    >
+  </div>
+</div>
+{% endblock %}

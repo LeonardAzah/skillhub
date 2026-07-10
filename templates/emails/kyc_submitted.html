@@ -1,0 +1,25 @@
+{% extends "email/base.html" %} {% block content %}
+<div class="hero">
+  <div class="icon">📋</div>
+  <h1>Documents received</h1>
+  <p class="sub">Your identity verification is under review.</p>
+</div>
+<div class="body">
+  <p>Hi <strong>{{ user.username }}</strong>,</p>
+  <p>
+    We've received your identity documents. Our team will review them within
+    <strong>1–2 business days</strong>. You'll receive an email once the review
+    is complete.
+  </p>
+  <div class="info-box">
+    <div class="row">
+      <span class="lbl">Document type</span
+      ><span class="val">{{ document_type|default:"Identity document" }}</span>
+    </div>
+    <div class="row">
+      <span class="lbl">Status</span><span class="val">Under review</span>
+    </div>
+  </div>
+  <p>In the meantime, you can browse providers and explore the platform.</p>
+</div>
+{% endblock %}

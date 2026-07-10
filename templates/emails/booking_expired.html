@@ -1,0 +1,24 @@
+{% extends "email/base.html" %}
+{% block content %}
+<div class="hero">
+  <div class="icon">⏰</div>
+  <h1>Booking request expired</h1>
+  <p class="sub">The provider didn't respond in time.</p>
+</div>
+<div class="body">
+  <p>Hi there,</p>
+  <p>Your booking request expired because the provider did not respond within 24 hours. Your payment has been fully refunded to your BoloConnect wallet.</p>
+
+<div class="info-box">
+  <div class="row"><span class="lbl">Service</span><span class="val">{{ category }}</span></div>
+  <div class="row"><span class="lbl">Date</span><span class="val">{{ scheduled_date }}</span></div>
+  <div class="row"><span class="lbl">Time</span><span class="val">{{ scheduled_time }}</span></div>
+  <div class="row"><span class="lbl">Location</span><span class="val">{{ location_address }}</span></div>
+  <div class="row"><span class="lbl">Amount</span><span class="val">{{ quoted_price }} XAF</span></div>
+</div>
+  <p>Would you like to find another provider for the same service?</p>
+  <div class="btn-wrap">
+    <a href="{{ frontend_url|default:"#" }}/providers/search?category={{ category }}" class="btn">Find a provider</a>
+  </div>
+</div>
+{% endblock %}

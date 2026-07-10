@@ -1,0 +1,33 @@
+{% extends "emails/base.html" %} {% block content %}
+<div class="hero">
+  <div class="icon">👋</div>
+  <h1>Welcome to BoloConnect!</h1>
+  <p class="sub">You're now part of Cameroon's trusted service marketplace.</p>
+</div>
+<div class="body">
+  <p>Hi <strong>{{ user.username }}</strong>,</p>
+  <p>
+    Your account has been created successfully. BoloConnect connects you with
+    verified tradespeople — plumbers, electricians, cleaners, and more — all in
+    one place.
+  </p>
+  <p>Here's what to do next:</p>
+  <div class="info-box">
+    <div class="row">
+      <span class="lbl">Step 1</span
+      ><span class="val">Verify your email address</span>
+    </div>
+    <div class="row">
+      <span class="lbl">Step 2</span
+      ><span class="val">Choose your role (Seeker or Provider)</span>
+    </div>
+    <div class="row">
+      <span class="lbl">Step 3</span
+      ><span class="val">Complete identity verification (KYC)</span>
+    </div>
+  </div>
+  <p>
+    If you have any questions, reply to this email — we're always happy to help.
+  </p>
+</div>
+{% endblock %}

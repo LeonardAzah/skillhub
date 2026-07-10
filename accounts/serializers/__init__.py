@@ -2,7 +2,9 @@ from .auth import (
     CustomTokenObtainPairSerializer,
     RegisterSerializer,
     LogoutSerializer,
-    GoogleAuthSerializer
+    GoogleAuthSerializer,
+    ResendVerificationSerializer,
+    EmailVerifySerializer,
     
 )
 from .common import (
@@ -16,4 +18,6 @@ __all__ =[
     'LogoutSerializer',
     'UserSummarySerializer',
     'GoogleAuthSerializer',
+    'ResendVerificationSerializer',
+    'EmailVerifySerializer',
 ]

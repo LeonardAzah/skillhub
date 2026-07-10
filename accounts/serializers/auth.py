@@ -246,4 +246,43 @@ class GoogleAuthSerializer(serializers.Serializer):
             counter += 1
         return candidate
 
+# Email Verification
+class EmailVerifySerializer(serializers.Serializer):
+    """Validate the email verification token."""
+    token = serializers.UUIDField()
 
+    def validate_token(self, value):
+        try:
+            vtoken = EmailVerificationToken.objects.select_related("user").get(token=value)
+        except EmailVerificationToken.DoesNotExist:
+            raise serializers.ValidationError("Invalid verification link.")
+        if not vtoken.is_valid:
+            raise serializers.ValidationError(
+                "This verification link has expired or has already been used."
+            )
+        return vtoken
+
+    def save(self):
+        vtoken: EmailVerificationToken = self.validated_data["token"]
+        user = vtoken.user
+        vtoken.is_used = True
+        vtoken.save(update_fields=["is_used"])
+        user.is_email_verified = True
+        user.save(update_fields=["is_email_verified"])
+        return user
+    
+# Resend Email Verification
+
+class ResendVerificationSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        try:
+            user = User.objects.get(email=value.lower())
+        except User.DoesNotExist:
+            # Don't reveal existence — return silently
+            return value
+        if user.is_email_verified:
+            raise serializers.ValidationError("This email is already verified.")
+        self.context["user"] = user
+        return value

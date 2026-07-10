@@ -1,0 +1,30 @@
+{% extends "email/base.html" %}
+{% block content %}
+<div class="hero">
+  <div class="icon">⚖️</div>
+  <h1>Dispute opened</h1>
+  <p class="sub">Our team will review and resolve this within 5 business days.</p>
+</div>
+<div class="body">
+  <p>Hi there,</p>
+  <p>A dispute has been raised for the following appointment. Payment has been frozen in escrow until the dispute is resolved.</p>
+
+<div class="info-box">
+  <div class="row"><span class="lbl">Service</span><span class="val">{{ category }}</span></div>
+  <div class="row"><span class="lbl">Date</span><span class="val">{{ scheduled_date }}</span></div>
+  <div class="row"><span class="lbl">Time</span><span class="val">{{ scheduled_time }}</span></div>
+  <div class="row"><span class="lbl">Location</span><span class="val">{{ location_address }}</span></div>
+  <div class="row"><span class="lbl">Amount</span><span class="val">{{ quoted_price }} XAF</span></div>
+</div>
+  <div class="info-box">
+    <div class="row"><span class="lbl">Dispute ID</span><span class="val">{{ dispute_id|truncatechars:12 }}</span></div>
+    <div class="row"><span class="lbl">Status</span><span class="val">Open — awaiting provider statement</span></div>
+  </div>
+  <div class="alert alert-warn">
+    <strong>Provider:</strong> you have 48 hours to submit your statement and upload supporting evidence.
+  </div>
+  <div class="btn-wrap">
+    <a href="{{ frontend_url|default:"#" }}/disputes/{{ dispute_id }}" class="btn btn-dark">View dispute</a>
+  </div>
+</div>
+{% endblock %}

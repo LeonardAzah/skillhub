@@ -1,0 +1,26 @@
+{% extends "email/base.html" %}
+{% block content %}
+<div class="hero">
+  <div class="icon">⚠️</div>
+  <h1>Verification unsuccessful</h1>
+  <p class="sub">We couldn't verify your identity with the documents provided.</p>
+</div>
+<div class="body">
+  <p>Hi <strong>{{ user.username }}</strong>,</p>
+  <p>Unfortunately we were unable to verify your identity. Please review the reason below and resubmit your documents.</p>
+  {% if reason %}
+  <div class="alert alert-danger">
+    <strong>Reason:</strong> {{ reason }}
+  </div>
+  {% endif %}
+  <div class="info-box">
+    <div class="row"><span class="lbl">Tips for resubmission</span><span class="val"></span></div>
+    <div class="row"><span class="lbl">• Make sure the document is clearly readable</span><span class="val"></span></div>
+    <div class="row"><span class="lbl">• All four corners must be visible</span><span class="val"></span></div>
+    <div class="row"><span class="lbl">• Selfie must match the ID photo</span><span class="val"></span></div>
+  </div>
+  <div class="btn-wrap">
+    <a href="{{ frontend_url|default:"#" }}/profile/verify" class="btn btn-dark">Resubmit documents</a>
+  </div>
+</div>
+{% endblock %}
