@@ -3,10 +3,13 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.generics import ListAPIView
+from rest_framework.generics import ListAPIView, ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.settings import api_settings
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter, OrderingFilter
 
 from utils.permissions import IsAdmin, IsProvider
+from utils.exceptions import error_response
 
 from .models import Category, CategoryAuditLog, ProviderCategory
 from .serializers import (
@@ -22,18 +25,34 @@ from .constants import CATEGORY_LIST_CACHE_KEY, CATEGORY_LIST_CACHE_TTL
 from .helper import write_audit_log, invalidate_category_cache, build_diff, refresh_provider_counts
 
 
-class CategoryListView(ListAPIView):
+class CategoryListCreateView(ListCreateAPIView):
     """
-    GET /api/v1/categories/
+    GET  /api/v1/categories/   -> list active categories (public, cached)
+    POST /api/v1/categories/   -> create a category (admin only)
+    """
+    filter_backends = [
+        DjangoFilterBackend,
+        SearchFilter,
+        OrderingFilter,
+    ]
 
-    Lists active categories with their active children.
-    Responses are cached per page and page_size.
-    """
-    permission_classes = [AllowAny]
-    serializer_class = CategorySerializer
+    search_fields = [
+        "title",
+        "description",
+    ]
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated(), IsAdmin()]
+        return [AllowAny()]
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return AdminCategoryWriteSerializer
+        return CategorySerializer
 
     def get_queryset(self):
-        return Category.objects.with_children.filter(is_active=True)
+        return Category.objects.with_children().filter(is_active=True)
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -60,44 +79,8 @@ class CategoryListView(ListAPIView):
 
         return response
 
-
-class CategoryDetailView(APIView):
-    """
-    GET /api/v1/categories/{slug}/
-    Get category detail (public, cached per-slug).
-    """
-    permission_classes = [AllowAny]
-
-    def get(self, request, slug: str):
-        cache_key = f"skillhub:categories:detail:{slug}"
-        cached = cache.get(cache_key)
-        if cached is not None:
-            return Response(cached)
-
-        try:
-            category = (
-                Category.objects.active()
-                .prefetch_related(
-                    "children__provider_categories"
-                )
-                .get(slug=slug)
-            )
-        except Category.DoesNotExist:
-            return Response({"error": "Category not found."}, status=status.HTTP_404_NOT_FOUND)
-
-        data = CategorySerializer(category, context={"request": request}).data
-        cache.set(cache_key, data, CATEGORY_LIST_CACHE_TTL)
-        return Response(data)
-
-class AdminCategoryCreateView(APIView):
-    """
-    POST /api/v1/admin/categories/
-    Admin creates a new category.
-    """
-    permission_classes = [IsAuthenticated, IsAdmin]
-
-    def post(self, request):
-        serializer = AdminCategoryWriteSerializer(data=request.data, context={"request": request})
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         category: Category = serializer.save()
 
@@ -105,23 +88,79 @@ class AdminCategoryCreateView(APIView):
         invalidate_category_cache()
 
         return Response(
-            CategorySerializer(category, context={"request": request}).data,
+            {
+                "success": True,
+                "message": f"Category '{category.title}' created successfully.",
+                "data": {"category": CategorySerializer(category, context={"request": request}).data},
+            },
             status=status.HTTP_201_CREATED,
         )
 
 
-class AdminCategoryUpdateView(APIView):
+class CategoryDetailView(RetrieveUpdateDestroyAPIView):
     """
-    PATCH /api/v1/admin/categories/{slug}/
-    Admin updates a category (partial update).
+    GET    /api/v1/categories/{slug}/   -> category detail (public, cached)
+    PATCH  /api/v1/categories/{slug}/   -> partial update (admin only)
+    DELETE /api/v1/categories/{slug}/   -> deactivate, cascades to children (admin only)
     """
-    permission_classes = [IsAuthenticated, IsAdmin]
+    lookup_field = "slug"
 
-    def patch(self, request, slug: str):
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [AllowAny()]
+        return [IsAuthenticated(), IsAdmin()]
+
+    def get_serializer_class(self):
+        if self.request.method == "PATCH":
+            return AdminCategoryPatchSerializer
+        return CategorySerializer
+
+    def get_queryset(self):
+        if self.request.method == "GET":
+            return Category.objects.active().prefetch_related(
+                "children__provider_categories"
+            )
+        return Category.objects.all()
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["request"] = self.request
+        return context
+
+    def retrieve(self, request, *args, **kwargs):
+        slug = kwargs["slug"]
+        cache_key = f"skillhub:categories:detail:{slug}"
+        cached_data = cache.get(cache_key)
+        if cached_data is not None:
+            return Response(
+                {
+                    "success": True,
+                    "message": "Category retrieved successfully.",
+                    "data": cached_data,
+                }
+            )
+
         try:
-            category = Category.objects.get(slug=slug)
+            category = self.get_queryset().get(slug=slug)
         except Category.DoesNotExist:
-            return Response({"error": "Category not found."}, status=status.HTTP_404_NOT_FOUND)
+            return error_response("Category not found.", status.HTTP_404_NOT_FOUND)
+
+        category_data = CategorySerializer(category, context={"request": request}).data
+        cache.set(cache_key, category_data, CATEGORY_LIST_CACHE_TTL)
+
+        return Response(
+            {
+                "success": True,
+                "message": "Category retrieved successfully.",
+                "data": category_data,
+            }
+        )
+
+    def update(self, request, *args, **kwargs):
+        try:
+            category = Category.objects.get(slug=kwargs["slug"])
+        except Category.DoesNotExist:
+            return error_response("Category not found.", status.HTTP_404_NOT_FOUND)
 
         # Snapshot before update for the diff
         before = {
@@ -133,9 +172,7 @@ class AdminCategoryUpdateView(APIView):
             "parent":      category.parent.slug if category.parent else None,
         }
 
-        serializer = AdminCategoryPatchSerializer(
-            category, data=request.data, partial=True, context={"request": request}
-        )
+        serializer = self.get_serializer(category, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         category = serializer.save()
 
@@ -152,30 +189,22 @@ class AdminCategoryUpdateView(APIView):
         write_audit_log(category, CategoryAuditLog.Action.UPDATED, request.user, diff)
         invalidate_category_cache()
 
-        return Response(CategorySerializer(category, context={"request": request}).data)
-    
+        return Response(
+            {
+                "success": True,
+                "message": f"Category '{category.title}' updated successfully.",
+                "data": {"category": CategorySerializer(category, context={"request": request}).data},
+            }
+        )
 
-
-class AdminCategoryDeactivateView(APIView):
-    """
-    DELETE /api/v1/admin/categories/{slug}/
-    Admin deactivates (soft-deletes) a category.
-
-    Children are also deactivated atomically.
-    """
-    permission_classes = [IsAuthenticated, IsAdmin]
-
-    def delete(self, request, slug: str):
+    def destroy(self, request, *args, **kwargs):
         try:
-            category = Category.objects.get(slug=slug)
+            category = Category.objects.get(slug=kwargs["slug"])
         except Category.DoesNotExist:
-            return Response({"error": "Category not found."}, status=status.HTTP_404_NOT_FOUND)
+            return error_response("Category not found.", status.HTTP_404_NOT_FOUND)
 
         if not category.is_active:
-            return Response(
-                {"error": "Category is already inactive."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return error_response("Category is already inactive.", status.HTTP_400_BAD_REQUEST)
 
         # Deactivate children too — prevents orphaned active subcategories
         child_slugs = list(category.children.filter(is_active=True).values_list("slug", flat=True))
@@ -189,12 +218,14 @@ class AdminCategoryDeactivateView(APIView):
 
         return Response(
             {
-                "message":      f"Category '{category.title}' has been deactivated.",
-                "deactivated_children": child_slugs,
+                "success": True,
+                "message": f"Category '{category.title}' has been deactivated.",
+                "data": {"deactivated_children": child_slugs},
             },
             status=status.HTTP_200_OK,
         )
-    
+
+
 class AdminCategoryActivateView(APIView):
     """
     POST /api/v1/admin/categories/{slug}/activate/
@@ -206,19 +237,16 @@ class AdminCategoryActivateView(APIView):
         try:
             category = Category.objects.get(slug=slug)
         except Category.DoesNotExist:
-            return Response({"error": "Category not found."}, status=status.HTTP_404_NOT_FOUND)
+            return error_response("Category not found.", status.HTTP_404_NOT_FOUND)
 
         if category.is_active:
-            return Response(
-                {"error": "Category is already active."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return error_response("Category is already active.", status.HTTP_400_BAD_REQUEST)
 
         # If this is a child, ensure the parent is also active
         if category.parent and not category.parent.is_active:
-            return Response(
-                {"error": f"Parent category '{category.parent.title}' must be activated first."},
-                status=status.HTTP_400_BAD_REQUEST,
+            return error_response(
+                f"Parent category '{category.parent.title}' must be activated first.",
+                status.HTTP_400_BAD_REQUEST,
             )
 
         category.is_active = True
@@ -228,10 +256,13 @@ class AdminCategoryActivateView(APIView):
         invalidate_category_cache()
 
         return Response(
-            CategorySerializer(category, context={"request": request}).data,
+            {
+                "success": True,
+                "message": f"Category '{category.title}' activated successfully.",
+                "data": {"category": CategorySerializer(category, context={"request": request}).data},
+            },
             status=status.HTTP_200_OK,
         )
-
 
 class AdminCategoryListView(ListAPIView):
     """
@@ -256,11 +287,11 @@ class AdminCategoryListView(ListAPIView):
             qs = qs.filter(parent__slug=parent_slug)
 
         return qs
-    
+
 
 class ProviderCategoryListView(APIView):
     """
-    GET /api/v1/profile/provider/categories/
+    GET /api/v1/providers
     List the authenticated provider's current service categories.
     """
     permission_classes = [IsAuthenticated, IsProvider]
@@ -274,12 +305,12 @@ class ProviderCategoryListView(APIView):
             .order_by("category__order", "category__title")
         )
         return Response(ProviderCategorySerializer(pcs, many=True).data)
-    
+
+
 class ProviderCategoryUpdateView(APIView):
     """
     PUT /api/v1/profile/provider/categories/
     Replace the authenticated provider's full set of service categories.
-    
 
     Body: { "category_slugs": ["plumbing", "electrical"] }
     """

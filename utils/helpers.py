@@ -11,3 +11,6 @@ def _frontend_url() -> str:
 def _setting(key: str, default):
     from django.conf import settings
     return getattr(settings, key, default)
+
+
+

@@ -65,3 +65,15 @@ def custom_exception_handler(exc, context):
         "errors": errors,
     }
     return response
+
+
+def error_response(message, status_code, data=None):
+    """Shared shape for error responses: {success, message, data}."""
+    return Response(
+        {
+            "success": False,
+            "message": message,
+            "data": data,
+        },
+        status=status_code,
+    )

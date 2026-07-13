@@ -154,7 +154,12 @@ REST_FRAMEWORK = {
         "login": "3/15min",
         "password_reset": "5/hour",
     },
-    "EXCEPTION_HANDLER": "utils.exceptions.custom_exception_handler",
+    # "EXCEPTION_HANDLER": "utils.exceptions.custom_exception_handler",
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
+    ],
 }
 
 

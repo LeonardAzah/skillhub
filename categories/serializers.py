@@ -36,7 +36,6 @@ class CategorySerializer(serializers.ModelSerializer):
     used on GET /api/v1/categories/ and GET /api/v1/categories/{slug}/
     """
     children = serializers.SerializerMethodField()
-    icon_url  = serializers.SerializerMethodField()
     parent_slug = serializers.SlugRelatedField(
         source="parent", slug_field="slug", read_only=True
     )
