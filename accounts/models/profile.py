@@ -53,8 +53,8 @@ class ProviderProfile(models.Model):
     )
 
     # Location (lat/lng for SQLite; use PostGIS Point in production)
-    location_lat     = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    location_lng     = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    location_lat     = models.DecimalField(max_digits=24, decimal_places=16, null=True, blank=True)
+    location_lng     = models.DecimalField(max_digits=24, decimal_places=16, null=True, blank=True)
     location_address = models.CharField(max_length=500, blank=True, default="")
 
     is_verified    = models.BooleanField(default=False)

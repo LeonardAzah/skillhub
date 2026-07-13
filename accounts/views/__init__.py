@@ -17,6 +17,11 @@ from .onboarding import (
     OnboardingView,
 )
 
+from .profiles import (
+    ProvidersView,
+    ProviderPublicProfileView,
+    ProfileView,
+)
 __all__ = [
     'RegisterView',
     'LoginView',
@@ -27,4 +32,7 @@ __all__ = [
     'VerifyEmailView',
     'ResendVerificationView',
     'OnboardingView',
+    'ProvidersView',
+    'ProviderPublicProfileView',
+    'ProfileView',
 ]

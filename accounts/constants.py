@@ -1,0 +1,2 @@
+PROVIDER_LIST_CACHE_KEY = "providers_list:cache_version"
+PROVIDER_CACHE_TTL=300

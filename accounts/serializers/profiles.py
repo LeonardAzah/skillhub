@@ -149,3 +149,29 @@ class UpdateProviderProfileSerializer(serializers.ModelSerializer):
             instance.user.phone_number = user_data["phone_number"]
             instance.user.save(update_fields=["phone_number"])
         return super().update(instance, validated_data)
+
+
+
+class ProviderListQuerySerializer(serializers.Serializer):
+   
+    category_slug = serializers.SlugField(required=False)
+    lat = serializers.FloatField(required=False, min_value=-90, max_value=90)
+    lng = serializers.FloatField(required=False, min_value=-180, max_value=180)
+    radius_km = serializers.FloatField(
+        required=False, min_value=0.1, max_value=500, default=50
+    )
+    min_rating = serializers.FloatField(
+        required=False, min_value=0, max_value=5, default=0
+    )
+    min_jobs = serializers.IntegerField(required=False, min_value=0, default=0)
+
+    def validate(self, attrs):
+        has_lat = "lat" in attrs
+        has_lng = "lng" in attrs
+        if has_lat != has_lng:
+            raise serializers.ValidationError(
+                "lat and lng must both be provided together."
+            )
+        return attrs
+    
+    

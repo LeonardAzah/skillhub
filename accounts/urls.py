@@ -9,6 +9,8 @@ from .views import (
        VerifyEmailView,
        ResendVerificationView,
        OnboardingView,
+       ProvidersView,
+
  
 )
 
@@ -26,5 +28,9 @@ urlpatterns = [
 
     # Onboarding
     path("/auth/onboarding", OnboardingView.as_view(), name="onboarding"),
+
+    #profile
+
+    path("/providers", ProvidersView.as_view(), name='providers')
 
 ]

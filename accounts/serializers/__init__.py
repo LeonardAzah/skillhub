@@ -15,6 +15,14 @@ from .onboarding import (
     OnboardingSerializer,
 )
 
+from .profiles import (
+    SeekerProfileSerializer,
+    UpdateSeekerProfileSerializer,
+    UpdateProviderProfileSerializer,
+    ProviderListQuerySerializer,
+    ProviderProfileSerializer
+)
+
 __all__ =[
 
     'CustomTokenObtainPairSerializer',
@@ -25,4 +33,10 @@ __all__ =[
     'ResendVerificationSerializer',
     'EmailVerifySerializer',
     'OnboardingSerializer',
+    'SeekerProfileSerializer',
+    'UpdateSeekerProfileSerializer',
+    'UpdateProviderProfileSerializer',
+    'ProviderListQuerySerializer',
+    'ProviderProfileSerializer'
+
 ]
