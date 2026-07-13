@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "bc2ccf87de54b0e0779a4f174d1747c62f2c23a8c65c4dd02c21a21c3b7169a6"
+            "sha256": "24e373876668ab3824a2a3467d8a696087dfb45cefea0f173b896b1b739eb7df"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -357,6 +357,15 @@
             "markers": "python_version >= '3.10'",
             "version": "==25.2"
         },
+        "django-redis": {
+            "hashes": [
+                "sha256:4b23aa6e0cd0937bb1242e9a463809e6004de3ca2150f34e986306bb6220d688",
+                "sha256:e48491c862f4350b0747ceb1016700686fb93c4f4e0fb9c490fe6c6658ffd933"
+            ],
+            "index": "pypi",
+            "markers": "python_version >= '3.10'",
+            "version": "==7.0.0"
+        },
         "djangorestframework": {
             "hashes": [
                 "sha256:a6def5f447fe78ff853bff1d47a3c59bf38f5434b031780b351b0c73a62db1a5",
@@ -506,6 +515,15 @@
             "index": "pypi",
             "version": "==3.8"
         },
+        "redis": {
+            "hashes": [
+                "sha256:47daa35a058c23468d6437f17a8c76882cb316b838ef763036af99b96cedd743",
+                "sha256:afc5a7a2f5a084f5b1880dec548dd45be17db7e43c82a30d84f952aefb05cfb0"
+            ],
+            "index": "pypi",
+            "markers": "python_version >= '3.10'",
+            "version": "==8.0.1"
+        },
         "requests": {
             "hashes": [
                 "sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0",
@@ -525,11 +543,11 @@
         },
         "tzdata": {
             "hashes": [
-                "sha256:9173fde7d80d9018e02a662e168e5a2d04f87c41ea174b139fbef642eda62d10",
-                "sha256:bbe9af844f658da81a5f95019480da3a89415801f6cc966806612cc7169bffe7"
+                "sha256:4a1518b8993086a7982523e071643f3c0e5f213e75b21318e78bcabfff9d1415",
+                "sha256:dc096730c87af6cab1b171c9d532be840741ff5d459015e7f6947bd7d7e54931"
             ],
             "markers": "python_version >= '2'",
-            "version": "==2026.2"
+            "version": "==2026.3"
         },
         "urllib3": {
             "hashes": [

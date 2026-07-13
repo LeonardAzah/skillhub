@@ -14,6 +14,8 @@ google-auth = "*"
 argon2-cffi = "*"
 django-cors-headers = "*"
 requests = "*"
+redis = "*"
+django-redis = "*"
 
 [dev-packages]
 

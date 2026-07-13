@@ -36,6 +36,7 @@ INSTALLED_APPS = [
 
     'accounts',
     'notifications',
+    'categories',
 ]
 
 MIDDLEWARE = [
@@ -86,6 +87,22 @@ DATABASES = {
     }
 }
 
+# Redis
+
+CACHE_REDIS_URL = config("CACHE_REDIS_URL", default='redis://localhost:6379/0')
+ORDERS_REDIS_URL = config("ORDERS_REDIS_URL", default='redis://localhost:6379/0')
+CACHES ={
+     "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": CACHE_REDIS_URL,
+        "KEY_PREFIX": "skillhub",
+        "TIMEOUT": 300,
+        "OpTIONS":{
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "IGNORE_EXCEPTIONS": True, # don't crash the app if redis hiccups
+        }
+    }
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
@@ -124,7 +141,7 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.IsAuthenticated",
     ),
     # "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "DEFAULT_PAGINATION_CLASS": "utils.pagination.StandardResultsPagination",
     "PAGE_SIZE": 20,
     "DEFAULT_THROTTLE_CLASSES": [
         "rest_framework.throttling.AnonRateThrottle",

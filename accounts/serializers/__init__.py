@@ -11,6 +11,10 @@ from .common import (
     UserSummarySerializer
 )
 
+from .onboarding import (
+    OnboardingSerializer,
+)
+
 __all__ =[
 
     'CustomTokenObtainPairSerializer',
@@ -20,4 +24,5 @@ __all__ =[
     'GoogleAuthSerializer',
     'ResendVerificationSerializer',
     'EmailVerifySerializer',
+    'OnboardingSerializer',
 ]

@@ -13,6 +13,10 @@ from .email_verification import (
     ResendVerificationView,
 )
 
+from .onboarding import (
+    OnboardingView,
+)
+
 __all__ = [
     'RegisterView',
     'LoginView',
@@ -22,4 +26,5 @@ __all__ = [
     'GoogleAuthView',
     'VerifyEmailView',
     'ResendVerificationView',
+    'OnboardingView',
 ]
