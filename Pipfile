@@ -16,6 +16,10 @@ django-cors-headers = "*"
 requests = "*"
 redis = "*"
 django-redis = "*"
+cloudinary = "*"
+django-cloudinary-storage = "*"
+django-storages = "*"
+boto3 = "*"
 
 [dev-packages]
 

@@ -34,6 +34,10 @@ INSTALLED_APPS = [
     "corsheaders",
     'django_filters',
 
+    "cloudinary",
+    "cloudinary_storage",
+    "storages",
+
     'accounts',
     'notifications',
     'categories',
@@ -104,6 +108,23 @@ CACHES ={
     }
 }
 
+STORAGES = {
+    "default": {
+        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+
+        # "BACKEND": "storages.backends.s3.S3Storage",
+
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
+
+CLOUDINARY_STORAGE = {
+    "CLOUD_NAME": config("CLOUDINARY_CLOUD_NAME"),
+    "API_KEY": config("CLOUDINARY_API_KEY"),
+    "API_SECRET": config("CLOUDINARY_API_SECRET"),
+}
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 

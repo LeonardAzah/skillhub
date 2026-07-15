@@ -22,6 +22,16 @@ from .profiles import (
     ProviderPublicProfileView,
     ProfileView,
 )
+
+from .portfolio import (
+    PortfolioItemCreateView,
+    ProviderPortfolioListView,
+    PortfolioItemDetailView,
+    PortfolioItemToggleFeaturedView,
+    PortfolioItemTogglePublishView,
+    PortfolioItemImageAddView,
+    PortfolioImageDetailView,
+)
 __all__ = [
     'RegisterView',
     'LoginView',
@@ -35,4 +45,11 @@ __all__ = [
     'ProvidersView',
     'ProviderPublicProfileView',
     'ProfileView',
+    'PortfolioItemCreateView',
+    'ProviderPortfolioListView',
+    'PortfolioItemDetailView',
+    'PortfolioItemToggleFeaturedView',
+    'PortfolioItemTogglePublishView',
+    'PortfolioItemImageAddView',
+    'PortfolioImageDetailView',
 ]

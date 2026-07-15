@@ -73,7 +73,19 @@ class IsEmailVerified(BasePermission):
             and request.user.is_email_verified
         )
 
+class IsPortfolioOwnerOrAdmin(BasePermission):
+    """
+    Object-level permission: only the provider who owns the portfolio item,
+    or an admin, can modify/delete it.
+    """
+    message = "You can only manage your own portfolio items."
 
+    def has_object_permission(self, request, view, obj):
+        if request.user and (request.user.is_staff or request.user.role == "admin"):
+            return True
+        return obj.provider.user_id == request.user.id
+    
+    
 class IsSeekerOrAdmin(BasePermission):
     """Seeker or Admin access."""
     message = "Seeker or admin access required."

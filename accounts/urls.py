@@ -10,8 +10,16 @@ from .views import (
        ResendVerificationView,
        OnboardingView,
        ProvidersView,
+       ProfileView,
+       ProviderPublicProfileView,
+       ProviderPortfolioListView,
+       PortfolioItemCreateView,
+       PortfolioItemDetailView,
+       PortfolioItemTogglePublishView,
+       PortfolioItemToggleFeaturedView,
+       PortfolioItemImageAddView,
+       PortfolioImageDetailView
 
- 
 )
 
 urlpatterns = [
@@ -31,6 +39,21 @@ urlpatterns = [
 
     #profile
 
-    path("/providers", ProvidersView.as_view(), name='providers')
+    path("/profile/providers", ProvidersView.as_view(), name='providers'),
+    path("/profile", ProfileView.as_view(), name="profile"),
+    path("/profile/provider/<uuid:provider_id>", ProviderPublicProfileView.as_view(), name="provider-public-profile"),
+
+    #portfolio
+
+    path("/portfolio/provider/<uuid:provider_id>", ProviderPortfolioListView.as_view(), name="provider-portfolio-list"),
+    path("/portfolio", PortfolioItemCreateView.as_view(), name="portfolio-create"),
+    path("/portfolio/<uuid:item_id>", PortfolioItemDetailView.as_view(), name="portfolio-detail"),
+    path("/portfolio/<uuid:item_id>/toggle-publish/", PortfolioItemTogglePublishView.as_view(), name="portfolio-toggle-publish"),
+    path("/portfolio/<uuid:item_id>/toggle-featured/", PortfolioItemToggleFeaturedView.as_view(), name="portfolio-toggle-featured"),
+
+    path("portfolio/<uuid:item_id>/images/", PortfolioItemImageAddView.as_view(), name="portfolio-image-add"),
+    path("portfolio/images/<uuid:image_id>/", PortfolioImageDetailView.as_view(), name="portfolio-image-detail"),
+
+
 
 ]

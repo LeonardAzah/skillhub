@@ -23,6 +23,11 @@ from .profiles import (
     ProviderProfileSerializer
 )
 
+from .portfolio import (
+    PortfolioImageSerializer,
+    PortfolioItemSerializer,
+)
+
 __all__ =[
 
     'CustomTokenObtainPairSerializer',

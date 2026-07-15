@@ -8,6 +8,7 @@ from ..models import (
     ProviderProfile,
 )
 
+from .portfolio import PortfolioItemSerializer
 
 # Seeker Profile
 
@@ -20,6 +21,9 @@ class SeekerProfileSerializer(serializers.ModelSerializer):
     phone_number = serializers.CharField(source="user.phone_number", read_only=True)
     is_verified = serializers.BooleanField(source="user.is_verified", read_only=True)
     account_type = serializers.CharField(source="user.account_type", read_only=True)
+    profile_picture = serializers.URLField(source="user.profile_picture")
+    is_kyc_verified = serializers.BooleanField(source="user.is_verified", read_only=True)
+
 
     class Meta:
         model = SeekerProfile
@@ -34,11 +38,12 @@ class SeekerProfileSerializer(serializers.ModelSerializer):
             "preferred_location_lat",
             "preferred_location_lng",
             "is_verified",
+            "is_kyc_verified",
             "account_type",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "email", "username", "phone_number", "is_verified", "account_type", "created_at", "updated_at"]
+        read_only_fields = ["id", "email", "username", "phone_number", "is_verified", "account_type", "created_at", "updated_at", "is_kyc_verified"]
 
 
 class UpdateSeekerProfileSerializer(serializers.ModelSerializer):
@@ -46,6 +51,7 @@ class UpdateSeekerProfileSerializer(serializers.ModelSerializer):
     # Allow updating phone on the user model
     phone_number = serializers.CharField(source="user.phone_number", required=False)
     full_name = serializers.CharField(required=False, allow_blank=True)
+    profile_picture = serializers.URLField(source="user.profile_picture")
 
     class Meta:
         model = SeekerProfile
@@ -68,22 +74,28 @@ class UpdateSeekerProfileSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         user_data = validated_data.pop("user", {})
+        user = instance.user
         if "phone_number" in user_data:
             instance.user.phone_number = user_data["phone_number"]
             instance.user.save(update_fields=["phone_number"])
+        if "profile_picture" in user_data:
+            user.profile_picture = user_data["profile_picture"]
+        
+        if user_data:
+            user.save()
+        
         return super().update(instance, validated_data)
 
 
 # Provider Profile
 
 class ProviderProfileSerializer(serializers.ModelSerializer):
-    """
-    Provider public profile (read).
-    """
     email = serializers.EmailField(source="user.email", read_only=True)
     username = serializers.CharField(source="user.username", read_only=True)
     phone_number = serializers.CharField(source="user.phone_number", read_only=True)
     is_kyc_verified = serializers.BooleanField(source="user.is_verified", read_only=True)
+    profile_picture = serializers.URLField(source="user.profile_picture")
+    portfolio_items = serializers.SerializerMethodField()
 
     class Meta:
         model = ProviderProfile
@@ -106,6 +118,7 @@ class ProviderProfileSerializer(serializers.ModelSerializer):
             "average_rating",
             "total_jobs",
             "is_kyc_verified",
+            "portfolio_items",
             "created_at",
             "updated_at",
         ]
@@ -115,10 +128,33 @@ class ProviderProfileSerializer(serializers.ModelSerializer):
             "total_jobs", "is_kyc_verified", "created_at", "updated_at",
         ]
 
+    def get_portfolio_items(self, obj):
+        """
+        Public viewers (and other users) only see published items.
+        The owning provider viewing their own profile also sees drafts —
+        controlled via `is_owner` passed in serializer context.
+        """
+        request = self.context.get("request")
+        is_owner = bool(
+            request
+            and request.user.is_authenticated
+            and getattr(request.user, "role", None) == "provider"
+            and hasattr(request.user, "provider_profile")
+            and request.user.provider_profile.id == obj.id
+        )
+
+        queryset = obj.portfolio_items.prefetch_related("images")
+        if not is_owner:
+            queryset = queryset.filter(is_published=True)
+        queryset = queryset.order_by("display_order", "-completed_on", "-created_at")
+
+        return PortfolioItemSerializer(queryset, many=True, context=self.context).data
 
 class UpdateProviderProfileSerializer(serializers.ModelSerializer):
     """PATCH — mutable provider profile fields."""
     phone_number = serializers.CharField(source="user.phone_number", required=False)
+    profile_picture = serializers.URLField(source="user.profile_picture")
+
 
     class Meta:
         model = ProviderProfile
@@ -145,9 +181,14 @@ class UpdateProviderProfileSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         user_data = validated_data.pop("user", {})
+        user = instance.user
         if "phone_number" in user_data:
             instance.user.phone_number = user_data["phone_number"]
             instance.user.save(update_fields=["phone_number"])
+        if "profile_picture" in user_data:
+            instance.user.profile_picture = user_data["profile_picture"]
+        if user_data:
+            user.save()
         return super().update(instance, validated_data)
 
 
