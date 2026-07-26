@@ -9,7 +9,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from ..models import User, EmailVerificationToken, DeviceToken
 from ..serializers import (RegisterSerializer, UserSummarySerializer, LogoutSerializer, GoogleAuthSerializer)
 
-from notifications.emails import EmailService
+from notifications.events import EventType
+from notifications.publisher import publish_event
+from utils.helpers import _setting, _frontend_url
 
 
 
@@ -26,14 +28,27 @@ class RegisterView(APIView):
         serializer.is_valid(raise_exception=True)
         user: User = serializer.save()
 
-        EmailService.send_email(
-    subject="Welcome to SkillHub",
-    recipient=user.email,
-    template_name="emails/welcome.html",
-    context={
-        "user": user,
-    },
-)
+        base_payload = {
+            "user_id":  str(user.id),
+            "email":    user.email,
+            "username": user.username,
+        }
+        # Welcome notification (always)
+        publish_event(EventType.USER_REGISTERED, base_payload)
+
+        # Email verification link — only for email/password accounts
+        if not user.is_email_verified:
+            vtoken = EmailVerificationToken.objects.create(user=user)
+            publish_event(
+                EventType.USER_VERIFICATION_REQUESTED,
+                {
+                    **base_payload,
+                    "token":        str(vtoken.token),
+                    "verify_url":   f"{_frontend_url()}/auth/verify-email/{vtoken.token}",
+                    "expiry_hours": _setting("EMAIL_VERIFICATION_EXPIRY_HOURS", 24),
+                },
+            )
+
         return Response(
             {
                 "success": True,

@@ -1,0 +1,26 @@
+{% extends "email/base.html" %}
+{% block content %}
+<div class="hero">
+  <div class="icon">⭐</div>
+  <h1>New review received</h1>
+  <p class="sub">{{ overall_rating }}/5 stars</p>
+</div>
+<div class="body">
+  <p>Hi there,</p>
+  <p>You received a new review from a seeker. Here's the breakdown:</p>
+  <div class="info-box">
+    <div class="row"><span class="lbl">Overall</span><span class="val">{{ overall_rating }} ★</span></div>
+    <div class="row"><span class="lbl">Communication</span><span class="val">{{ communication }} ★</span></div>
+    <div class="row"><span class="lbl">Punctuality</span><span class="val">{{ punctuality }} ★</span></div>
+    <div class="row"><span class="lbl">Quality</span><span class="val">{{ quality }} ★</span></div>
+  </div>
+  {% if has_comment %}
+  <div class="alert alert-info">
+    The seeker left a written comment. Log in to read and reply (within 30 days).
+  </div>
+  {% endif %}
+  <div class="btn-wrap">
+    <a href="{{ frontend_url|default:"#" }}/reviews/{{ review_id }}" class="btn">View review</a>
+  </div>
+</div>
+{% endblock %}

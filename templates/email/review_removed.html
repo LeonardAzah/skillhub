@@ -1,0 +1,20 @@
+{% extends "email/base.html" %} {% block content %}
+<div class="hero">
+  <div class="icon">🗑️</div>
+  <h1>Review removed</h1>
+</div>
+<div class="body">
+  <p>Hi <strong>{{ user.username }}</strong>,</p>
+  <p>
+    Your review has been removed from the platform by our moderation team as it
+    was found to violate our community guidelines.
+  </p>
+  {% if reason %}
+  <div class="alert alert-danger"><strong>Reason:</strong> {{ reason }}</div>
+  {% endif %}
+  <p>
+    Please review our <a href="#">community guidelines</a> before submitting
+    future reviews. If you have questions, contact our support team.
+  </p>
+</div>
+{% endblock %}

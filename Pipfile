@@ -20,6 +20,10 @@ cloudinary = "*"
 django-cloudinary-storage = "*"
 django-storages = "*"
 boto3 = "*"
+pika = "*"
+celery = "*"
+django-celery-beat = "*"
+firebase-admin = "*"
 
 [dev-packages]
 

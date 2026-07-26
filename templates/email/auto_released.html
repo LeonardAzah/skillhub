@@ -1,0 +1,35 @@
+{% extends "email/base.html" %} {% block content %}
+<div class="hero">
+  <div class="icon">⏱️</div>
+  <h1>Payment auto-released</h1>
+  <p class="sub">{{ title }}</p>
+</div>
+<div class="body">
+  <p>Hi there,</p>
+  <p>{{ title }}</p>
+
+  <div class="info-box">
+    <div class="row">
+      <span class="lbl">Service</span><span class="val">{{ category }}</span>
+    </div>
+    <div class="row">
+      <span class="lbl">Date</span><span class="val">{{ scheduled_date }}</span>
+    </div>
+    <div class="row">
+      <span class="lbl">Time</span><span class="val">{{ scheduled_time }}</span>
+    </div>
+    <div class="row">
+      <span class="lbl">Location</span
+      ><span class="val">{{ location_address }}</span>
+    </div>
+    <div class="row">
+      <span class="lbl">Amount</span
+      ><span class="val">{{ quoted_price }} XAF</span>
+    </div>
+  </div>
+  <div class="alert alert-info">
+    If you have any concerns about the quality of work, please contact our
+    support team.
+  </div>
+</div>
+{% endblock %}

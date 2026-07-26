@@ -1,0 +1,27 @@
+{% extends "email/base.html" %}
+{% block content %}
+<div class="hero">
+  <div class="icon">💰</div>
+  <h1>Payment released!</h1>
+  <p class="sub">The seeker has confirmed your work.</p>
+</div>
+<div class="body">
+  <p>Hi there,</p>
+  <p>The seeker has confirmed that your job is complete. Your payment has been released to your BoloConnect wallet.</p>
+
+<div class="info-box">
+  <div class="row"><span class="lbl">Service</span><span class="val">{{ category }}</span></div>
+  <div class="row"><span class="lbl">Date</span><span class="val">{{ scheduled_date }}</span></div>
+  <div class="row"><span class="lbl">Time</span><span class="val">{{ scheduled_time }}</span></div>
+  <div class="row"><span class="lbl">Location</span><span class="val">{{ location_address }}</span></div>
+  <div class="row"><span class="lbl">Amount</span><span class="val">{{ quoted_price }} XAF</span></div>
+</div>
+  <div class="amount green">+ {{ quoted_price }} XAF</div>
+  <div class="alert alert-success">
+    Your wallet has been credited. You can withdraw your earnings from the wallet screen.
+  </div>
+  <div class="btn-wrap">
+    <a href="{{ frontend_url|default:"#" }}/wallet" class="btn">View my wallet</a>
+  </div>
+</div>
+{% endblock %}

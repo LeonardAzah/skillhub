@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     'django_filters',
+    "django_celery_beat",
 
     "cloudinary",
     "cloudinary_storage",
@@ -248,10 +249,23 @@ LOGIN_RATE_LIMIT_ATTEMPTS = 3         # Per IP per 15 min
 EMAIL_VERIFICATION_EXPIRY_HOURS = 24  
 PASSWORD_RESET_EXPIRY_HOURS = 1 
 
+# --------------- rabbitmq ---------------------------------------------
+RABBITMQ_URL = config("RABBITMQ_URL", default="amqp://guest:guest@localhost:5672/%2F")
 
+# Celery
+CELERY_BROKER_URL = config("RABBITMQ_URL", default="amqp://guest:guest@localhost:5672/%2F")
+CELERY_RESULT_BACKEND = config("CELERY_RESULT_BACKEND", default="redis://localhost:6379/2")
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60
+CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 
 # Email
-from decouple import config
 
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 
@@ -262,5 +276,4 @@ EMAIL_USE_SSL = False
 
 EMAIL_HOST_USER = config("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD")
-
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL")

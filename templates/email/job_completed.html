@@ -1,0 +1,26 @@
+{% extends "email/base.html" %}
+{% block content %}
+<div class="hero">
+  <div class="icon">🔧</div>
+  <h1>Job marked complete</h1>
+  <p class="sub">Please confirm or raise a dispute within 48 hours.</p>
+</div>
+<div class="body">
+  <p>Hi there,</p>
+  <p><strong>{{ provider_name|default:"Your provider" }}</strong> has marked your job as complete and uploaded completion evidence. Please review and confirm — or raise a dispute if the work was not completed satisfactorily.</p>
+
+<div class="info-box">
+  <div class="row"><span class="lbl">Service</span><span class="val">{{ category }}</span></div>
+  <div class="row"><span class="lbl">Date</span><span class="val">{{ scheduled_date }}</span></div>
+  <div class="row"><span class="lbl">Time</span><span class="val">{{ scheduled_time }}</span></div>
+  <div class="row"><span class="lbl">Location</span><span class="val">{{ location_address }}</span></div>
+  <div class="row"><span class="lbl">Amount</span><span class="val">{{ quoted_price }} XAF</span></div>
+</div>
+  <div class="alert alert-warn">
+    <strong>Action required:</strong> If you do not respond within 48 hours, payment will be automatically released to the provider.
+  </div>
+  <div class="btn-wrap">
+    <a href="{{ frontend_url|default:"#" }}/appointments/{{ appointment_id }}" class="btn">Review &amp; confirm</a>
+  </div>
+</div>
+{% endblock %}

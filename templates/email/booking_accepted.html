@@ -1,0 +1,26 @@
+{% extends "email/base.html" %}
+{% block content %}
+<div class="hero">
+  <div class="icon">🎉</div>
+  <h1>Booking confirmed!</h1>
+  <p class="sub">Your service provider has accepted the appointment.</p>
+</div>
+<div class="body">
+  <p>Hi there,</p>
+  <p>Good news — <strong>{{ provider_name|default:"Your provider" }}</strong> has accepted your booking. Here are your appointment details:</p>
+
+<div class="info-box">
+  <div class="row"><span class="lbl">Service</span><span class="val">{{ category }}</span></div>
+  <div class="row"><span class="lbl">Date</span><span class="val">{{ scheduled_date }}</span></div>
+  <div class="row"><span class="lbl">Time</span><span class="val">{{ scheduled_time }}</span></div>
+  <div class="row"><span class="lbl">Location</span><span class="val">{{ location_address }}</span></div>
+  <div class="row"><span class="lbl">Amount</span><span class="val">{{ quoted_price }} XAF</span></div>
+</div>
+  <div class="alert alert-info">
+    Your payment is securely held in escrow and will only be released to the provider once you confirm the job is complete.
+  </div>
+  <div class="btn-wrap">
+    <a href="{{ frontend_url|default:"#" }}/appointments/{{ appointment_id }}" class="btn">View appointment</a>
+  </div>
+</div>
+{% endblock %}
