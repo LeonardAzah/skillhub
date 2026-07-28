@@ -32,6 +32,11 @@ from .portfolio import (
     PortfolioItemImageAddView,
     PortfolioImageDetailView,
 )
+
+from .devices import (
+    DeviceTokenRegisterView,
+    DeviceTokenDeleteView,
+)
 __all__ = [
     'RegisterView',
     'LoginView',
@@ -52,4 +57,6 @@ __all__ = [
     'PortfolioItemTogglePublishView',
     'PortfolioItemImageAddView',
     'PortfolioImageDetailView',
+    'DeviceTokenRegisterView',
+    'DeviceTokenDeleteView',
 ]

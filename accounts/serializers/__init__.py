@@ -28,6 +28,10 @@ from .portfolio import (
     PortfolioItemSerializer,
 )
 
+from .devices import (
+    DeviceTokenSerializer
+)
+
 __all__ =[
 
     'CustomTokenObtainPairSerializer',
@@ -42,6 +46,7 @@ __all__ =[
     'UpdateSeekerProfileSerializer',
     'UpdateProviderProfileSerializer',
     'ProviderListQuerySerializer',
-    'ProviderProfileSerializer'
+    'ProviderProfileSerializer',
+    'DeviceTokenSerializer',
 
 ]

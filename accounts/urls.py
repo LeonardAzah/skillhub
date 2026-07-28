@@ -18,7 +18,9 @@ from .views import (
        PortfolioItemTogglePublishView,
        PortfolioItemToggleFeaturedView,
        PortfolioItemImageAddView,
-       PortfolioImageDetailView
+       PortfolioImageDetailView,
+       DeviceTokenRegisterView,
+       DeviceTokenDeleteView,
 
 )
 
@@ -51,8 +53,13 @@ urlpatterns = [
     path("/portfolio/<uuid:item_id>/toggle-publish/", PortfolioItemTogglePublishView.as_view(), name="portfolio-toggle-publish"),
     path("/portfolio/<uuid:item_id>/toggle-featured/", PortfolioItemToggleFeaturedView.as_view(), name="portfolio-toggle-featured"),
 
-    path("portfolio/<uuid:item_id>/images/", PortfolioItemImageAddView.as_view(), name="portfolio-image-add"),
-    path("portfolio/images/<uuid:image_id>/", PortfolioImageDetailView.as_view(), name="portfolio-image-detail"),
+    path("/portfolio/<uuid:item_id>/images", PortfolioItemImageAddView.as_view(), name="portfolio-image-add"),
+    path("/portfolio/images/<uuid:image_id>", PortfolioImageDetailView.as_view(), name="portfolio-image-detail"),
+
+
+    #Device tokens
+    path("/devices/register", DeviceTokenRegisterView.as_view(), name='device-register'),
+    path("/devices/<str:token>",DeviceTokenDeleteView.as_view(), name='device-delete')
 
 
 

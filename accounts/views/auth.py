@@ -134,6 +134,13 @@ class GoogleAuthView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        if created:
+            publish_event(EventType.USER_REGISTERED, {
+                "user_id": str(user.id),
+                "email":user.email,
+                "username":user.username
+            })
+
         refresh = RefreshToken.for_user(user)
         refresh["user_id"]      = str(user.id)
         refresh["role"]         = user.role or ""

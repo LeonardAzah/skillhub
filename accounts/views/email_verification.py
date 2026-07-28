@@ -1,3 +1,4 @@
+import logging
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -9,9 +10,11 @@ from utils.helpers import _frontend_url, _setting
 from ..models import User, EmailVerificationToken
 from ..serializers import EmailVerifySerializer, ResendVerificationSerializer, UserSummarySerializer
 
-from notifications.emails import EmailService
+from notifications.events import EventType
+from notifications.publisher import publish_event
 
 
+logger = logging.getLogger(__name__)
 
 
 class VerifyEmailView(APIView):
@@ -26,21 +29,11 @@ class VerifyEmailView(APIView):
         serializer.is_valid(raise_exception=True)
         user: User = serializer.save()
 
-        EmailService.send_email(
-    subject="Verify your BoloConnect email",
-    recipient=user.email,
-    template_name="emails/verify_email.html",
-    context={
-         
-            "user_id":      user.user_id,
-            "username":     user.username,
-            "verify_url":   f"{_frontend_url()}/auth/verify-email/{token}",
-            "expiry_hours": _setting("EMAIL_VERIFICATION_EXPIRY_HOURS", 24),
-            "token":        token,
+        publish_event(EventType.USER_EMAIL_VERIFIED, {
+            "user_id":str(user.id),
+            "email": user.email,
+        })
     
-    },
-)
-
         return Response(
             {
                 "success": True,
@@ -70,23 +63,19 @@ class ResendVerificationView(APIView):
         if user:
             EmailVerificationToken.objects.filter(user=user, is_used=False).update(is_used=True)
             vtoken = EmailVerificationToken.objects.create(user=user)
-           
-            EmailService.send_email(
-    subject="Verify your BoloConnect email",
-    recipient=user.email,
-    template_name="emails/verify_email.html",
-    context={
-         
-            "user_id":      user.user_id,
-            "email":        user.email,
-            "username":     user.username,
-            "verify_url":   f"{_frontend_url()}/auth/verify-email/{vtoken.token}",
-            "expiry_hours": _setting("EMAIL_VERIFICATION_EXPIRY_HOURS", 24),
-            "token":        str(vtoken.token),
-    
-    },
-)
 
+            publish_event(
+                EventType.USER_VERIFICATION_REQUESTED,
+                {
+                    "user_id": str(user.id),
+                    "email": user.email,
+                    "username": user.username,
+                    "token": str(vtoken.token),
+                    "verify_url": f"{_frontend_url()}/auth/verify-email/{vtoken.token}",
+                    "expiry_hours":_setting("EMAIL_VERIFICATION_EXPIRY_HOURS", 24)
+                }
+            )
+           
         # Always 200 — prevents user enumeration
         return Response(
             {
