@@ -19,6 +19,12 @@ from .views import (
        PortfolioItemToggleFeaturedView,
        PortfolioItemImageAddView,
        PortfolioImageDetailView,
+       KYCSubmitView,
+       KYCApproveView,
+       KYCDetailView,
+       KYCListView,
+       KYCRejectView,
+       KYCStatusView,
        DeviceTokenRegisterView,
        DeviceTokenDeleteView,
 
@@ -56,10 +62,20 @@ urlpatterns = [
     path("/portfolio/<uuid:item_id>/images", PortfolioItemImageAddView.as_view(), name="portfolio-image-add"),
     path("/portfolio/images/<uuid:image_id>", PortfolioImageDetailView.as_view(), name="portfolio-image-detail"),
 
+    #KYC
+    path("/profile/verify", KYCSubmitView.as_view(), name="kyc-submit"),
+    path("/profile/verify/status", KYCStatusView.as_view(), name="kyc-status"),
+    path("/kyc", KYCListView.as_view(), name="admin-kyc-list"),
+    path("/kyc/<uuid:doc_id>/approve", KYCApproveView.as_view(), name="kyc-approve"),
+    path("/kyc/<uuid:doc_id>/reject", KYCRejectView.as_view(), name="kyc-reject"),
+    path("/kyc/<uuid:kyc_id>", KYCDetailView.as_view(), name="admin-kyc-detail"),
+
 
     #Device tokens
     path("/devices/register", DeviceTokenRegisterView.as_view(), name='device-register'),
     path("/devices/<str:token>",DeviceTokenDeleteView.as_view(), name='device-delete')
+
+
 
 
 

@@ -32,6 +32,13 @@ from .devices import (
     DeviceTokenSerializer
 )
 
+from .kyc import (
+    KYCSubmitSerializer,
+    KYCStatusSerializer,
+    KYCDocumentSerializer,
+    KYCDocumentDetailSerializer,
+)
+
 __all__ =[
 
     'CustomTokenObtainPairSerializer',
@@ -48,5 +55,8 @@ __all__ =[
     'ProviderListQuerySerializer',
     'ProviderProfileSerializer',
     'DeviceTokenSerializer',
-
+    'KYCSubmitSerializer',
+    'KYCStatusSerializer',
+    'KYCDocumentSerializer',
+    'KYCDocumentDetailSerializer',
 ]

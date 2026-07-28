@@ -36,6 +36,16 @@ from .portfolio import (
 from .devices import (
     DeviceTokenRegisterView,
     DeviceTokenDeleteView,
+
+)
+
+from .kyc import (
+    KYCRejectView,
+    KYCDetailView,
+    KYCApproveView,
+    KYCListView,
+    KYCStatusView,
+    KYCSubmitView,
 )
 __all__ = [
     'RegisterView',
@@ -59,4 +69,5 @@ __all__ = [
     'PortfolioImageDetailView',
     'DeviceTokenRegisterView',
     'DeviceTokenDeleteView',
+    'KYCDetailView',
 ]

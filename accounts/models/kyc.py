@@ -37,7 +37,7 @@ class KYCDocument(models.Model):
 
     document_type = models.CharField(max_length=20, choices=DocumentType.choices)
     document_side = models.CharField(max_length=20, choices=DocumentSide.choices)
-    file = models.URLField(
+    file_url = models.URLField(
         max_length=500,
         help_text=_("S3 key/URL of the uploaded document (stored after client completes presigned upload). "
                     "Accessed via signed URL only — never a public link."),
