@@ -10,6 +10,20 @@ from django.conf import settings
 
 
 
+def _emit_account_locked(user, lockout_minutes: int) -> None:
+    """Fire-and-forget domain event when an account is locked out."""
+    try:
+        from notifications.events import EventType
+        from notifications.publisher import publish_event
+        publish_event(EventType.USER_ACCOUNT_LOCKED, {
+            "user_id":         str(user.id),
+            "email":           user.email,
+            "username":        user.username,
+            "lockout_minutes": lockout_minutes,
+        })
+    except Exception:
+        pass  # Never let a notification failure block auth
+
 class UserManager(BaseUserManager):
     """Custom manager for the User model."""
     def create_user(self, email, username, password=None, **extra_fields):
@@ -120,6 +134,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     failed_login_attempts = models.PositiveSmallIntegerField(default=0)
     lockout_until         = models.DateTimeField(null=True, blank=True)
 
+    password_changed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=_("Timestamp of last password change. Used to invalidate tokens issued before this time."),
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -160,7 +180,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         self.save(update_fields=["failed_login_attempts", "lockout_until"])
 
         if just_locked:
-            pass
+            _emit_account_locked(self, duration)
 
     def clear_failed_logins(self) -> None:
         """Reset counter on successful login."""
