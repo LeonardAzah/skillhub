@@ -3,6 +3,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
+from drf_spectacular.utils import extend_schema
+
+
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView as BaseTokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -14,7 +17,10 @@ from notifications.publisher import publish_event
 from utils.helpers import _setting, _frontend_url
 
 
-
+@extend_schema(
+    request=RegisterSerializer,
+    responses=RegisterSerializer,
+)
 class RegisterView(APIView):
     """
     POST /api/v1/auth/register

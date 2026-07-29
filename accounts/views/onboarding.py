@@ -11,8 +11,13 @@ from ..models import User
 from ..serializers import OnboardingSerializer, UserSummarySerializer
 
 from utils.exceptions import error_response
+from drf_spectacular.utils import extend_schema
 
 
+@extend_schema(
+    request=OnboardingSerializer,
+    responses=OnboardingSerializer,
+)
 class OnboardingView(APIView):
     """
     POST /api/v1/auth/onboarding

@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "corsheaders",
     'django_filters',
     "django_celery_beat",
+    "drf_spectacular",
 
     "cloudinary",
     "cloudinary_storage",
@@ -156,14 +157,16 @@ PASSWORD_HASHERS = [
 
 
 REST_FRAMEWORK = {
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+
     "DEFAULT_AUTHENTICATION_CLASSES": (
         # "rest_framework_simplejwt.authentication.JWTAuthentication",
         "accounts.authentication.PasswordAwareJWTAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
-    # "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "utils.pagination.StandardResultsPagination",
     "PAGE_SIZE": 20,
     "DEFAULT_THROTTLE_CLASSES": [
@@ -278,3 +281,21 @@ EMAIL_USE_SSL = False
 EMAIL_HOST_USER = config("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD")
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL")
+
+# OpenAPI - Swagger
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "SkillHub API",
+    "DESCRIPTION": "Mobile Service Marketplace Platform",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+     "COMPONENT_SPLIT_REQUEST": True,
+    "SECURITY": [{"BearerAuth": []}],
+    "SCHEMA_PATH_PREFIX": "/api/v1",
+
+    # Optional
+    "SWAGGER_UI_SETTINGS": {
+        "deepLinking": True,
+        "persistAuthorization": True,
+    },
+}

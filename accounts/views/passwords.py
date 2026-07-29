@@ -5,10 +5,14 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.throttling import AnonRateThrottle
+from drf_spectacular.utils import extend_schema
+
 
 from notifications.events import EventType
 from notifications.publisher import publish_event
 from utils.helpers import get_client_ip, _frontend_url, _setting
+
 
 from ..models import User, PasswordResetToken
 
@@ -22,12 +26,16 @@ from ..serializers import (
 logger = logging.getLogger(__name__)
 
 
-
+@extend_schema(
+    request=PasswordResetRequestSerializer,
+    responses=PasswordResetRequestSerializer,
+)
 class PasswordResetRequestView(APIView):
     """Initiate password reset."""
 
     permission_classes = [AllowAny]
-    throttle_classes = "password_reset"
+    throttle_classes = [AnonRateThrottle]
+    throttle_scope = "password_reset"
 
     def post(self, request):
         serializer = PasswordResetRequestSerializer(data=request.data, context={"request":request})

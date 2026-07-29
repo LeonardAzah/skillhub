@@ -24,6 +24,7 @@ pika = "*"
 celery = "*"
 django-celery-beat = "*"
 firebase-admin = "*"
+drf-spectacular = "*"
 
 [dev-packages]
 

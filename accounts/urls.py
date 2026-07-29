@@ -27,6 +27,10 @@ from .views import (
        KYCStatusView,
        DeviceTokenRegisterView,
        DeviceTokenDeleteView,
+       PasswordResetRequestView,
+       PasswordResetConfirmView,
+       SetNewPasswordView,
+       ChangePasswordView,
 
 )
 
@@ -42,6 +46,12 @@ urlpatterns = [
     path("/auth/verify-email/<uuid:token>", VerifyEmailView.as_view(), name="verify-email"),
     path("/auth/resend-verification", ResendVerificationView.as_view(), name="resend-verification"),
 
+    # Reset password
+    path("/auth/password/reset",PasswordResetRequestView.as_view(), name="password-reset-request" ),
+    path("/auth/password/reset/confirm/<uuid:token>", PasswordResetConfirmView.as_view(), name="password-reset-confirm"  ),
+    path("auth/password/reset/confirm", SetNewPasswordView.as_view(), name="password-reset-set"),
+    path("auth/password/change", ChangePasswordView.as_view(), name="password-change"),
+
     # Onboarding
     path("/auth/onboarding", OnboardingView.as_view(), name="onboarding"),
 
@@ -56,8 +66,8 @@ urlpatterns = [
     path("/portfolio/provider/<uuid:provider_id>", ProviderPortfolioListView.as_view(), name="provider-portfolio-list"),
     path("/portfolio", PortfolioItemCreateView.as_view(), name="portfolio-create"),
     path("/portfolio/<uuid:item_id>", PortfolioItemDetailView.as_view(), name="portfolio-detail"),
-    path("/portfolio/<uuid:item_id>/toggle-publish/", PortfolioItemTogglePublishView.as_view(), name="portfolio-toggle-publish"),
-    path("/portfolio/<uuid:item_id>/toggle-featured/", PortfolioItemToggleFeaturedView.as_view(), name="portfolio-toggle-featured"),
+    path("/portfolio/<uuid:item_id>/toggle-publish", PortfolioItemTogglePublishView.as_view(), name="portfolio-toggle-publish"),
+    path("/portfolio/<uuid:item_id>/toggle-featured", PortfolioItemToggleFeaturedView.as_view(), name="portfolio-toggle-featured"),
 
     path("/portfolio/<uuid:item_id>/images", PortfolioItemImageAddView.as_view(), name="portfolio-image-add"),
     path("/portfolio/images/<uuid:image_id>", PortfolioImageDetailView.as_view(), name="portfolio-image-detail"),
@@ -74,9 +84,5 @@ urlpatterns = [
     #Device tokens
     path("/devices/register", DeviceTokenRegisterView.as_view(), name='device-register'),
     path("/devices/<str:token>",DeviceTokenDeleteView.as_view(), name='device-delete')
-
-
-
-
 
 ]

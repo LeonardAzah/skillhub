@@ -39,6 +39,13 @@ from .devices import (
 
 )
 
+from .passwords import (
+    ChangePasswordView,
+    SetNewPasswordView,
+    PasswordResetConfirmView,
+    PasswordResetRequestView,
+)
+
 from .kyc import (
     KYCRejectView,
     KYCDetailView,
@@ -70,4 +77,8 @@ __all__ = [
     'DeviceTokenRegisterView',
     'DeviceTokenDeleteView',
     'KYCDetailView',
+    'ChangePasswordView',
+    'SetNewPasswordView',
+    'PasswordResetConfirmView',
+    'PasswordResetRequestView',
 ]
