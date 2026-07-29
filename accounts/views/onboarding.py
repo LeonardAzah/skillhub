@@ -10,10 +10,12 @@ from rest_framework.views import APIView
 from ..models import User
 from ..serializers import OnboardingSerializer, UserSummarySerializer
 
+from utils.exceptions import error_response
+
 
 class OnboardingView(APIView):
     """
-    POST /api/v1/auth/onboarding/
+    POST /api/v1/auth/onboarding
     Post-verification role selection.
     No external event needed; role is surfaced on the JWT claims on next login.
     """
@@ -21,15 +23,12 @@ class OnboardingView(APIView):
 
     def post(self, request):
         if request.user.has_completed_onboarding:
-            return Response(
-                {
-                    "success": False,
-                    "message": "Onboarding already completed.",
-                    "errors":  {},
-                },
+
+            return error_response (
+                message="Onboarding already completed.",
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
+        
         serializer = OnboardingSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         user: User = serializer.save()

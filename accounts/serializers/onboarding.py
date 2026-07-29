@@ -21,7 +21,7 @@ class OnboardingSerializer(serializers.Serializer):
         user: User = self.context["request"].user
         account_type = self.validated_data["account_type"]
         user.account_type = account_type
-        user.role = account_type  # role mirrors account_type for seekers/providers
+        user.role = account_type 
         user.save(update_fields=["account_type", "role"])
 
         # Create the role-specific profile stub

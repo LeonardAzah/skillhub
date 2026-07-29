@@ -39,6 +39,13 @@ from .kyc import (
     KYCDocumentDetailSerializer,
 )
 
+from .passwords import (
+    PasswordResetRequestSerializer,
+    PasswordResetConfirmSerializer,
+    SetNewPasswordSerializer,
+    ChangePasswordSerializer,
+)
+
 __all__ =[
 
     'CustomTokenObtainPairSerializer',
@@ -59,4 +66,8 @@ __all__ =[
     'KYCStatusSerializer',
     'KYCDocumentSerializer',
     'KYCDocumentDetailSerializer',
+    'PasswordResetRequestSerializer',
+    'PasswordResetConfirmSerializer',
+    'SetNewPasswordSerializer',
+    'ChangePasswordSerializer',
 ]
