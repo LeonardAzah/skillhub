@@ -1,11 +1,13 @@
 from django.contrib import admin
-from .models import User, ProviderProfile, SeekerProfile
+from .models import User, ProviderProfile, SeekerProfile, KYCDocument, KYCSubmission
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
 # Register your models here.
 # admin.site.register(User)
 admin.site.register(ProviderProfile)
 admin.site.register(SeekerProfile)
+admin.site.register(KYCDocument)
+admin.site.register(KYCSubmission)
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):

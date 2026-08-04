@@ -1,6 +1,6 @@
 from .users import User, UserManager
 from .profile import SeekerProfile, ProviderProfile
-from .kyc import KYCDocument
+from .kyc import KYCDocument, KYCSubmission
 from .tokens import EmailVerificationToken, PasswordResetToken
 from .devices import DeviceToken
 from .portfolio import PortfolioItem, PortfolioImage
@@ -16,4 +16,5 @@ __all__ = [
     "DeviceToken",
     'PortfolioItem',
     'PortfolioImage',
+    'KYCSubmission',
 ]

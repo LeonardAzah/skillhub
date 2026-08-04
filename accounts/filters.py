@@ -1,6 +1,6 @@
 import django_filters
 
-from .models import ProviderProfile, KYCDocument
+from .models import ProviderProfile, KYCSubmission
 
 
 class ProviderFilterSet(django_filters.FilterSet):
@@ -14,18 +14,22 @@ class ProviderFilterSet(django_filters.FilterSet):
         model = ProviderProfile
         fields = ["min_rating", "min_jobs"]
 
-class KYCDocumentFilter(django_filters.FilterSet):
+class KYCSubmissionFilter(django_filters.FilterSet):
     status = django_filters.ChoiceFilter(
-        choices=KYCDocument.Status.choices,
+        choices=KYCSubmission.Status.choices,
     )
     email = django_filters.CharFilter(
         field_name="user__email",
         lookup_expr="icontains",
     )
+    nationality = django_filters.CharFilter(
+        field_name="nationality",
+        lookup_expr="icontains",
+    )
     created_at = django_filters.DateFromToRangeFilter(
         field_name="created_at",
     )
-    
+
     class Meta:
-        model = KYCDocument
-        fields = ["status", "email", "created_at"]
+        model = KYCSubmission
+        fields = ["status", "email", "nationality", "created_at"]

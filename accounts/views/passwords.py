@@ -69,6 +69,15 @@ class PasswordResetRequestView(APIView):
                 },
                 status=status.HTTP_200_OK,
             )
+        else:
+            return Response (
+                            {
+                            "success": True,
+                            "message": "A password reset link has been sent to your email.",
+                            "data":    {},
+                            },
+                            status=status.HTTP_200_OK,
+                        )
 class PasswordResetConfirmView(APIView):
     """Validate reset token"""
 
@@ -89,7 +98,11 @@ class PasswordResetConfirmView(APIView):
             },
             status=status.HTTP_200_OK,
         )
-
+    
+@extend_schema(
+    request=SetNewPasswordSerializer,
+    responses=SetNewPasswordSerializer,
+)
 class SetNewPasswordView(APIView):
     """Consume reset token, set new password."""
     permission_classes = [AllowAny]

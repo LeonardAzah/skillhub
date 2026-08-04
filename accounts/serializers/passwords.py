@@ -54,7 +54,7 @@ class SetNewPasswordSerializer(serializers.Serializer):
         try:
             validate_password(value)
         except DjangoValidationError as e:
-            raise serializers.ValidationError(e.message)
+            raise serializers.ValidationError(e.messages)
         return value
 
     def validate(Self, attrs):
@@ -72,7 +72,7 @@ class SetNewPasswordSerializer(serializers.Serializer):
         return attrs
 
     def save(self):
-        reset_token: PasswordResetToken = self.validateed_date["reset_token"]
+        reset_token: PasswordResetToken = self.validated_data["reset_token"]
         user = reset_token.user
         user.set_password(self.validated_data["new_password"])
         user.clear_failed_logins()

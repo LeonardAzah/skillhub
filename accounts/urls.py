@@ -49,8 +49,8 @@ urlpatterns = [
     # Reset password
     path("/auth/password/reset",PasswordResetRequestView.as_view(), name="password-reset-request" ),
     path("/auth/password/reset/confirm/<uuid:token>", PasswordResetConfirmView.as_view(), name="password-reset-confirm"  ),
-    path("auth/password/reset/confirm", SetNewPasswordView.as_view(), name="password-reset-set"),
-    path("auth/password/change", ChangePasswordView.as_view(), name="password-change"),
+    path("/auth/password/reset/confirm", SetNewPasswordView.as_view(), name="password-reset-set"),
+    path("/auth/password/change", ChangePasswordView.as_view(), name="password-change"),
 
     # Onboarding
     path("/auth/onboarding", OnboardingView.as_view(), name="onboarding"),
