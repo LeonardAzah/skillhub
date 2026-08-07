@@ -10,6 +10,8 @@ from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
+from utils.helpers import _setting
+
 
 class WalletPin(models.Model):
     """
@@ -50,8 +52,6 @@ class WalletPin(models.Model):
 
     class Meta:
         verbose_name = _("wallet PIN")
-
-    # ── Hash helpers ──────────────────────────────────────────────────────────
 
     @staticmethod
     def _hash(salt: str, pin: str) -> str:
@@ -127,14 +127,30 @@ class Wallet(models.Model):
         on_delete=models.CASCADE,
         related_name="wallet",
     )
-    balance         = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal("0.00"))
-    escrow_balance  = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal("0.00"))
-    total_earned    = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal("0.00"))
-    total_spent     = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal("0.00"))
-    currency        = models.CharField(max_length=3, default="XAF")
-    is_active       = models.BooleanField(default=True)
-    created_at      = models.DateTimeField(auto_now_add=True)
-    updated_at      = models.DateTimeField(auto_now=True)
+    balance = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal("0.00"))
+
+    reserved_balance = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text=_(
+            "Funds reserved for pending operations such as cash-outs."
+        ),
+    )
+
+    escrow_balance = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal("0.00"))
+
+    total_earned = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal("0.00"))
+
+    total_spent = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal("0.00"))
+
+    currency = models.CharField(max_length=3, default="XAF")
+
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = _("wallet")
@@ -151,6 +167,153 @@ class Wallet(models.Model):
         """Available + escrowed funds."""
         return self.balance + self.escrow_balance
 
+    def available_balance(self) -> Decimal:
+        return self.balance - self.reserved_balance
+
+class Payment(models.Model):
+    """
+    Represents an interaction with an external payment provider.
+    A payment may or may not result in a wallet transaction.
+    """
+
+    class Provider(models.TextChoices):
+        FAPSHI = "fapshi", _("Fapshi")
+        STRIPE = "stripe", _("Stripe")
+
+    class Method(models.TextChoices):
+        MTN_MOBILE_MONEY = "mtn_mobile_money", "Mobile Money"
+        ORANGE_MONEY = "orange_money", "Mobile Money"
+        BANK_TRANSFER = "bank_transfer", "Bank Transfer"
+
+    class Direction(models.TextChoices):
+        CASH_IN = "cash_in", _("Cash In")
+        CASH_OUT = "cash_out", _("Cash Out")
+
+    class Status(models.TextChoices):
+        INITIATED = "initiated", _("Initiated")
+        PENDING = "pending", _("Pending")
+        PROCESSING = "processing", _("Processing")
+        COMPLETED = "completed", _("Completed")
+        FAILED = "failed", _("Failed")
+        CANCELLED = "cancelled", _("Cancelled")
+        EXPIRED = "expired", _("Expired")
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    user = models.ForeignKey(
+        _setting("AUTH_USER_MODEL", "accounts.User"),
+        on_delete=models.PROTECT,
+        related_name="payments",
+    )
+
+    wallet = models.ForeignKey(
+        "Wallet",
+        on_delete=models.PROTECT,
+        related_name="payments",
+    )
+
+    provider = models.CharField(
+        max_length=20,
+        choices=Provider.choices,
+    )
+
+    method = models.CharField(
+        max_length=50,
+        choices=Method.choices,
+        null=True,
+    blank=True,
+    )
+
+    direction = models.CharField(
+        max_length=20,
+        choices=Direction.choices,
+    )
+
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+    )
+
+    currency = models.CharField(
+        max_length=3,
+        default="XAF",
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.INITIATED,
+        db_index=True,
+    )
+    appointment_id = models.UUIDField(
+            null=True, blank=True, db_index=True,
+            help_text=_("Linked appointment UUID if applicable."),
+        )
+
+    idempotency_key = models.CharField(
+        max_length=255,
+        db_index=True,
+    )
+    
+    internal_reference = models.CharField(
+        max_length=100,
+        unique=True,
+        db_index=True,
+    )
+
+    provider_reference = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+    )
+
+    provider_transaction_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+    )
+
+    checkout_url = models.URLField(
+        blank=True,
+        default="",
+    )
+
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    failure_reason = models.TextField(
+        blank=True,
+        default="",
+    )
+
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "idempotency_key"],
+                name="payment_user_idempotency_unique",
+            )
+        ]
+
+        indexes = [
+            models.Index(fields=["status"]),
+            models.Index(fields=["provider"]),
+            models.Index(fields=["internal_reference"]),
+            models.Index(fields=["provider_reference"]),
+        ]
+
+    def __str__(self):
+        return f"{self.internal_reference} ({self.status})"
+    
 class Transaction(models.Model):
     """
     Immutable double-entry ledger record.
@@ -168,48 +331,45 @@ class Transaction(models.Model):
         WITHDRAWAL      = "withdrawal",     _("Withdrawal")
         REFUND          = "refund",         _("Refund")
 
-    class Status(models.TextChoices):
-        PENDING   = "pending",   _("Pending")
-        COMPLETED = "completed", _("Completed")
-        FAILED    = "failed",    _("Failed")
-        REVERSED  = "reversed",  _("Reversed")
-
-    id               = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    wallet           = models.ForeignKey(Wallet, on_delete=models.PROTECT, related_name="transactions")
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    wallet = models.ForeignKey(Wallet, on_delete=models.PROTECT, related_name="transactions")
     transaction_type = models.CharField(max_length=20, choices=Type.choices, db_index=True)
-    amount           = models.DecimalField(
+    amount = models.DecimalField(
         max_digits=15, decimal_places=2,
         help_text=_("Positive = credit, negative = debit."),
     )
-    status           = models.CharField(max_length=10, choices=Status.choices,
-                                        default=Status.PENDING, db_index=True)
-    idempotency_key  = models.CharField(
-        max_length=255, unique=True, db_index=True,
-        help_text=_("Client-generated UUID; prevents duplicate processing."),
-    )
-    reference        = models.CharField(max_length=255, blank=True, default="",
-                                        help_text=_("External gateway reference."))
-    appointment_id   = models.UUIDField(
-        null=True, blank=True, db_index=True,
-        help_text=_("Linked appointment UUID if applicable."),
-    )
-    description      = models.TextField(blank=True, default="")
-    metadata         = models.JSONField(default=dict, blank=True)
-    created_at       = models.DateTimeField(auto_now_add=True, db_index=True)
-    updated_at       = models.DateTimeField(auto_now=True)
+    appointment_id = models.UUIDField(
+                null=True, blank=True, db_index=True,
+                help_text=_("Linked appointment UUID if applicable."),
+            )
+
+    balance_after = models.DecimalField(
+    max_digits=15,
+    decimal_places=2,
+)
+
+    payment = models.ForeignKey(
+    Payment,
+    null=True,
+    blank=True,
+    on_delete=models.PROTECT,
+    related_name="ledger_entries",
+)
+    
+    description = models.TextField(blank=True, default="")
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
-        verbose_name = _("transaction")
+        verbose_name = _("ledgerentry")
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["wallet", "status"]),
             models.Index(fields=["wallet", "transaction_type"]),
             models.Index(fields=["appointment_id"]),
-            models.Index(fields=["idempotency_key"]),
         ]
 
     def __str__(self):
-        return f"[{self.transaction_type}] {self.amount} {self.wallet.currency} — {self.status}"
+        return f"[{self.transaction_type}] {self.amount} {self.wallet.currency}"
 
 
 class EscrowAccount(models.Model):
@@ -262,55 +422,6 @@ class EscrowAccount(models.Model):
 
     def __str__(self):
         return f"Escrow[{self.appointment_id}] {self.amount} — {self.status}"
-
-
-class WithdrawalRequest(models.Model):
-    """Provider/seeker cash-out request."""
-
-    class Status(models.TextChoices):
-        PENDING   = "pending",   _("Pending")
-        APPROVED  = "approved",  _("Approved")
-        PROCESSED = "processed", _("Processed")
-        REJECTED  = "rejected",  _("Rejected")
-        ON_HOLD   = "on_hold",   _("On Hold")
-
-    class Method(models.TextChoices):
-        MOBILE_MONEY = "mobile_money", _("Mobile Money")
-        BANK_TRANSFER= "bank_transfer",_("Bank Transfer")
-
-    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    wallet       = models.ForeignKey(Wallet, on_delete=models.PROTECT, related_name="withdrawals")
-    amount       = models.DecimalField(max_digits=15, decimal_places=2)
-    method       = models.CharField(max_length=15, choices=Method.choices)
-    # Recipient account details (mobile number or bank account)
-    recipient_reference = models.CharField(
-        max_length=100,
-        help_text=_("Mobile money number (E.164) or bank account number."),
-    )
-    recipient_name = models.CharField(max_length=200, blank=True, default="")
-    status         = models.CharField(max_length=10, choices=Status.choices,
-                                      default=Status.PENDING, db_index=True)
-    idempotency_key= models.CharField(max_length=255, unique=True)
-    transaction    = models.ForeignKey(
-        Transaction, null=True, blank=True,
-        on_delete=models.SET_NULL, related_name="withdrawal_request",
-    )
-    rejection_reason = models.TextField(blank=True, default="")
-    # processed_at     = models.DateTimeField(null=True, blank=True)
-    # processed_by     = models.ForeignKey(
-    #     "accounts.User", null=True, blank=True,
-    #     on_delete=models.SET_NULL, related_name="processed_withdrawals",
-    # )
-    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = _("withdrawal request")
-        ordering = ["-created_at"]
-        indexes = [models.Index(fields=["status", "created_at"])]
-
-    def __str__(self):
-        return f"Withdrawal {self.amount} {self.wallet.currency} [{self.status}]"
 
 
 class PaymentGatewayLog(models.Model):

@@ -104,8 +104,8 @@ class RegisterSerializer(serializers.ModelSerializer):
         return value
     
     def validate_phone_number(self, value):
-        if value and not re.match(r"^\+\d{7,15}$", value):
-            raise serializers.ValidationError("Phone must be E.164 format, e.g. +237123456789")
+        if value and not re.match(r"^6\d{8}$", value):
+            raise serializers.ValidationError("Phone must be exactly 9 digits and start with 6, e.g. 612345678")
         if value and User.objects.filter(phone_number=value).exists():
             raise serializers.ValidationError("This phone number is already registered.")
         return value

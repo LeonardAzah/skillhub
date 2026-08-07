@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'notifications',
     'categories',
     'payments',
+    'appointments',
 ]
 
 MIDDLEWARE = [
@@ -187,6 +188,8 @@ REST_FRAMEWORK = {
         "rest_framework.filters.SearchFilter",
         "rest_framework.filters.OrderingFilter",
     ],
+    "COERCE_DECIMAL_TO_STRING": False,
+
 }
 
 

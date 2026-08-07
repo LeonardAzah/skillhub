@@ -1,6 +1,7 @@
 """
 Private utilities shared across view modules.
 """
+from rest_framework.exceptions import ValidationError
 
 
 def _frontend_url() -> str:
@@ -18,6 +19,21 @@ def get_client_ip(request) -> str:
     if x_forwarded_for:
         return x_forwarded_for.split(",")[0].strip()
     return request.META.get("REMOTE_ADDR", "")
+
+
+def get_idempotency_key(request) -> str:
+    idempotency_key =request.headers.get("Idempotency-Key")
+
+    if not idempotency_key:
+                raise ValidationError(
+                    {
+                        "idempotency_key": [
+                            "Idempotency-Key header is required."
+                        ]
+                    }
+                )
+
+    return idempotency_key
 
 
 def invalidate_existing_tokens(self) -> None:

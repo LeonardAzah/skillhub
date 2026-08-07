@@ -59,6 +59,8 @@ class EventType:
     ESCROW_HELD                = "payments.escrow.held"
     ESCROW_RELEASED            = "payments.escrow.released"
     ESCROW_REFUNDED            = "payments.escrow.refunded"
+    WALLET_PIN_SET ="payment.wallet.pin"
+    WALLET_PIN_VERIFIED="payment.wallet.pin.verify"
 
     # ── Reviews ───────────────────────────────────────────────────────────────
     REVIEW_CREATED             = "reviews.review.created"
