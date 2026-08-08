@@ -62,7 +62,7 @@ def custom_exception_handler(exc, context):
     response.data = {
         "success": False,
         "message": message,
-        "errors": errors,
+        "data": errors,
     }
     return response
 

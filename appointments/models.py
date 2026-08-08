@@ -109,10 +109,9 @@ class Appointment(models.Model):
         max_digits=9, decimal_places=6, null=True, blank=True,
     )
 
-    scheduled_date = models.DateField(db_index=True)
-    scheduled_time = models.TimeField()
+    scheduled_at = models.DateTimeField(db_index=True)
 
-    notes        = models.TextField(
+    notes = models.TextField(
         blank=True, default="",
         help_text=_("Special instructions from the seeker."),
     )
@@ -161,7 +160,7 @@ class Appointment(models.Model):
         verbose_name_plural = _("appointments")
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["status", "scheduled_date"]),
+            models.Index(fields=["status", "scheduled_at"]),
             models.Index(fields=["provider", "status"]),
             models.Index(fields=["customer", "status"]),
             models.Index(fields=["status", "completed_at"]),
@@ -214,11 +213,6 @@ class Appointment(models.Model):
     @property
     def is_terminal(self) -> bool:
         return self.status in self.TERMINAL_STATUSES
-
-    @property
-    def scheduled_datetime(self):
-        import datetime
-        return datetime.datetime.combine(self.scheduled_date, self.scheduled_time)
 
     def __str__(self):
         return (
