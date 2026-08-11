@@ -3,9 +3,15 @@ from .views import (
     ProviderAvailabilityView,
     ProviderAvailabilityDeleteView,
     ProviderAvailabilityBlockView,
+    AppointmentListCreateView,
+    AppointmentDetailView,
 )
 
 urlpatterns = [
+    path(
+        "", AppointmentListCreateView.as_view(),name="appointment-create"
+    ),
+    
     path(
             "/providers/availability",
             ProviderAvailabilityBlockView.as_view(),
@@ -21,5 +27,11 @@ urlpatterns = [
     path("/availability/<uuid:blocked_id>",
          ProviderAvailabilityDeleteView.as_view(),
          name="provider-availability-delete" ),
+
+    path(
+        "/<uuid:pk>",
+        AppointmentDetailView.as_view(),
+        name="appointment-detail"
+    ),
 
 ]

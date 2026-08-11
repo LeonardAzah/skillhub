@@ -88,7 +88,7 @@ class Appointment(models.Model):
         related_name="appointments_as_provider",
     )
     customer = models.ForeignKey(
-        "accounts.SeekerProfile",
+        "accounts.user",
         on_delete=models.PROTECT,
         related_name="appointments_as_customer",
     )
@@ -213,6 +213,23 @@ class Appointment(models.Model):
     @property
     def is_terminal(self) -> bool:
         return self.status in self.TERMINAL_STATUSES
+
+    @property
+    def display_name(self) -> str:
+        """
+        Best-available human-readable name for this user, regardless of
+        which profile(s) they've onboarded into.
+        Falls back to username if neither profile has a full_name set.
+        """
+        seeker = getattr(self, "seeker_profile", None)
+        if seeker and seeker.full_name:
+            return seeker.full_name
+
+        provider = getattr(self, "provider_profile", None)
+        if provider and provider.full_name:
+            return provider.full_name
+
+        return self.username
 
     def __str__(self):
         return (
