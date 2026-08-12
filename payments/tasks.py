@@ -105,7 +105,7 @@ def on_appointment_rejected_or_expired(self, appointment_id: str, **kwargs):
 def on_appointment_cancelled(self, appointment_id: str, cancelled_by: str = "",
                               quoted_price: str = "0", **kwargs):
     """
-    Apply SRS §7.5 cancellation policy on CANCELLED event.
+    Apply cancellation policy on CANCELLED event.
     The cancellation timing determines the refund split.
     """
     

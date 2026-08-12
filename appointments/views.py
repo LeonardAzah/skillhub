@@ -1,6 +1,8 @@
 import logging
 from datetime import date, timedelta, time
 
+from django.db import transaction
+
 from rest_framework import status, permissions
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -8,7 +10,22 @@ from rest_framework.views import APIView
 from rest_framework.generics import ListCreateAPIView, RetrieveAPIView
 
 from .models import Appointment, ProviderAvailability
-from .serializers import ProviderAvailabilitySerializer, CreateAppointmentSerializer, AppointmentListSerializer, AppointmentSerializer
+from .serializers import (
+    ProviderAvailabilitySerializer, 
+    CreateAppointmentSerializer, 
+    AppointmentListSerializer, 
+    AppointmentSerializer,
+    AcceptAppointmentSerializer,
+    RejectAppointmentSerializer,
+    StartAppointmentSerializer,
+    CompleteAppointmentSerializer,
+    ConfirmAppointmentSerializer,
+    CancleAppointmentSerializer,
+    DisputeAppointmentSerializer,
+
+    )
+
+from _helper import _get_appointment_or_404, _appointment_payload
 
 from accounts.models import ProviderProfile, User
 from utils.permissions import IsAdmin, IsProvider, IsVerified
@@ -229,11 +246,284 @@ class AppointmentListCreateView(ListCreateAPIView):
         })
 
         output = AppointmentSerializer(apt, context=self.get_serializer_context())
-        return Response(output.data, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "success":True,
+                "message":"Appointment list retrived successfully.",
+                "data":output.data,
+            },
+             status=status.HTTP_201_CREATED
+            )
 
 
 class AppointmentDetailView(RetrieveAPIView):
     """GET /api/v1/appointments/{id}"""
-    queryset = Appointment.objects.select_related("provider__user", "customer", "category")
+    queryset = Appointment.objects.select_related(
+        "provider__user",
+        "provider__user__seeker_profile",
+        "provider__user__provider_profile",
+        "customer__seeker_profile",
+        "customer__provider_profile",
+        "category",
+        )
     serializer_class = AppointmentSerializer
     permission_classes = [permissions.IsAuthenticated, IsAppointmentParty]
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response(
+            {
+                "success": True,
+                "message": "Appointment retrieved successfully.",
+                "data": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+class AcceptAppointmentView(APIView):
+    """POST /api/v1/appointments/{id}/accept - provider only"""
+    permission_classes = [IsAuthenticated, IsProvider]
+
+    def post(self, request, pk):
+        apt, err = _get_appointment_or_404(pk)
+        if err:
+            return err
+        if apt.provider.user != request.user:
+            return error_response(
+                message="Forbidden.",
+                status_code=status.HTTP_403_FORBIDDEN
+            )
+
+        AcceptAppointmentSerializer(data={}, context={"appointment": apt}).is_valid(raise_exception=True)
+
+        apt.transition_to(Appointment.Status.ACCEPTED, actor=request.user)
+
+        publish_event(EventType.APPOINTMENT_ACCEPTED, _appointment_payload(apt))
+
+        return Response(
+            {
+                "success":True,
+                "message":"Appointment accepted successfully.",
+                "data":AppointmentSerializer(apt).data
+            },
+            status=status.HTTP_200_OK
+        )
+
+class RejectAppointmentView(APIView):
+    """POST /api/v1/appointments/{id}/reject - provider only"""
+
+    permission_classes = [IsAuthenticated, IsProvider]
+
+    def post(self, request, pk):
+        apt, err = _get_appointment_or_404(pk)
+
+        if err:
+            return err
+        if apt.provider.user != request.user:
+            return error_response(
+                message="Forbidden.",
+                status_code=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = RejectAppointmentSerializer(data=request.data, context={"appointment":apt})
+        serializer.is_valid(raise_exception=True)
+
+        reason = serializer.validated_data.get("reason", "")
+        apt.transition_to(Appointment.Status.REJECTED, actor=request.user, reason=reason)
+
+        publish_event(EventType.APPOINTMENT_REJECTED, {**_appointment_payload(apt), "reason": reason})
+
+        return Response(
+             {
+                "success":True,
+                "message":"Appointment Recjected successfully.",
+                "data": AppointmentSerializer(apt).data
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class StartAppointmentView(APIView):
+    """POST /api/v1/appointments/{id}/start - provider only"""
+
+    permission_classes= [IsAuthenticated, IsProvider]
+
+    def post(self, request, pk):
+        apt, err = _get_appointment_or_404(pk)
+
+        if err:
+            return err
+
+        if apt.provider.user != request.user:
+            return error_response(
+                message="Forbidden.",
+                status_code=status.HTTP_403_FORBIDDEN
+            )
+
+        StartAppointmentSerializer(data={}, context={"appointment":apt}).is_valid(raise_exception=True)
+
+        apt.transition_to(Appointment.Status.IN_PROGRESS, actor=request.user)
+
+        publish_event(EventType.APPOINTMENT_STARTED, _appointment_payload(apt))
+
+        return Response(
+            {
+                "success":True,
+                "message":"Appointment started successfully.",
+                "data": AppointmentSerializer(apt).data
+
+            },
+            status=status.HTTP_200_OK
+        )
+
+class CompleteAppointmentView(APIView):
+    """POST /api/v1/appointments/{id}/complete - provider only """
+    permission_classes=[IsAuthenticated, IsProvider]
+
+    def post(self, request, pk):
+
+        apt, err = _get_appointment_or_404(pk)
+
+        if err:
+            return err
+
+        if apt.provider.user != request.user:
+            return error_response(
+                        message="Forbidden.",
+                        status_code=status.HTTP_403_FORBIDDEN
+                    )
+
+        serializer = CompleteAppointmentSerializer(data=request.data, context={"appointment": apt})
+        serializer.is_valid(raise_exception=True)
+
+        validated_value = serializer.validated_data
+
+        apt.completion_proof = validated_value["completion_proof"]
+        apt.completion_notes = validated_value.get("completion_notes", "")
+
+        if validated_value.get("final_price"):
+            apt.final_price = validated_value["final_price"]
+
+        apt.save(update_fields=["completion_proof", "completion_notes", "final_price", "updated_at"])
+
+        apt.transition_to(Appointment.Status.COMPLETED, actor=request.user)
+
+        publish_event(EventType.APPOINTMENT_COMPLETED, {
+            **_appointment_payload(apt),
+            "completion_proof": apt.completion_proof,
+        })
+
+        return Response(
+                    {
+                        "success":True,
+                        "message":"Appointment marked as completted.",
+                        "data": AppointmentSerializer(apt).data
+        
+                    },
+                    status=status.HTTP_200_OK
+                )
+
+
+class ConfirmAppointmentView(APIView):
+    """POST /api/v1/appointments/{id}/confirm - triggers escrow release"""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        apt, err = _get_appointment_or_404(pk)
+        if err:
+            return err
+        if apt.customer.id != request.user:
+             return error_response(
+                        message="Forbidden.",
+                        status_code=status.HTTP_403_FORBIDDEN
+                    )
+
+        ConfirmAppointmentSerializer(data={}, context={"appointment":apt}).is_valid(raise_exception=True)
+
+        with transaction.atomic():
+            apt.transition_to(Appointment.Status.CONFIRMED, actor=request.user)
+            ProviderProfile.objects.filter(pk=apt.provider_id).update(
+                total_jobs=apt.provider.total_jobs + 1
+            )
+
+        publish_event(EventType.APPOINTMENT_CONFIRMED, _appointment_payload(apt))
+
+        return Response(
+            {
+                "success": True,
+                "message": "Appointment confirmed successfully.",
+                "data": AppointmentSerializer(apt).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class CancelAppointmentView(APIView):
+    """POST /api/v1/appointments/{id}/cancel - either party or admin"""
+    permission_classes = [IsAuthenticated, IsAppointmentParty]
+
+    def post(self, request, pk):
+        apt, err = _get_appointment_or_404(pk)
+
+        if err:
+            return err
+
+        user = request.user
+
+        serializer = CancleAppointmentSerializer(data=request.data, context={"appointment": apt})
+
+        serializer.is_valid(raise_exception=True)
+
+        reason = serializer.validated_data.get("reason", "")
+
+        apt.transition_to(Appointment.Status.CANCELLED, actor=user, reason=reason)
+
+        publish_event(EventType.APPOINTMENT_CANCELLED, {
+             **_appointment_payload(apt),
+            "reason":       reason,
+            "cancelled_by": user.role,
+        })
+
+        return Response(
+                    {
+                        "success": True,
+                        "message": "Appointment cancelled.",
+                        "data": AppointmentSerializer(apt).data,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+class DisputeAppointmentView(APIView):
+    """POST /api/v1/appointments/{id}/dispute - seeker only, within 48h of COMPLETED"""
+
+    permission_classes = [IsAuthenticated, IsAppointmentParty]
+
+    def post(self, request, pk):
+        apt, err = _get_appointment_or_404(pk)
+        if err:
+            return err
+
+        serializer = DisputeAppointmentSerializer(data=request.data, context={"appointment": apt})
+        serializer.is_valid(raise_exception=True)
+
+        apt.transition_to(Appointment.Status.DISPUTED, actor=request.user)
+
+        publish_event(EventType.DISPUTE_RAISED, {
+            **_appointment_payload(apt),
+            "seeker_statement": serializer.validated_data["seeker_statement"],
+            "dispute_id":       None,
+        })
+
+        return Response(
+                            {
+                                "success": True,
+                                "message": "Dispute Created.",
+                                "data": AppointmentSerializer(apt).data,
+                            },
+                            status=status.HTTP_200_OK,
+                        )
+
+
+

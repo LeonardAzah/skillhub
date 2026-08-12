@@ -277,3 +277,98 @@ class AppointmentSerializer(serializers.ModelSerializer):
             "status_logs"
         ]
         read_only_fields = fields
+
+class AcceptAppointmentSerializer(serializers.Serializer):
+    def validate(self, attrs):
+        apt: Appointment = self.context["appointment"]
+        if not apt.can_transition_to(Appointment.Status.ACCEPTED): raise serializers.ValidationError(
+            f"Cannot accept an application with status {apt.status}"
+        )
+
+        return attrs
+
+class RejectAppointmentSerializer(serializers.Serializer):
+    reason = serializers.CharField(max_length=500, required=False, allow_blank=True, default="")
+
+    def validate(self, attrs):
+        apt:Appointment = self.context["appointment"]
+        if not apt.can_transition_to(Appointment.Status.REJECTED):
+            raise serializers.ValidationError(
+                f"Cannot reject an appointment with status {apt.status}"
+            )
+        return attrs
+
+class StartAppointmentSerializer(serializers.Serializer):
+    def validate(self, attrs):
+        apt:Appointment = self.context["appointment"]
+        if not apt.can_transition_to(Appointment.Status.IN_PROGRESS):
+            raise serializers.ValidationError(
+                f"Cannot start an appointment with status '{apt.status}'."
+            )
+        return attrs
+
+class CompleteAppointmentSerializer(serializers.Serializer):
+    completion_prof = serializers.URLField(
+        help_text="S3/cloudinary URL of the completion photo/video."
+    )
+    completion_notes = serializers.CharField(
+        max_lenght=1000, required=False, allow_blank=True, default=""
+    )
+    final_price = serializers.DecimalField(
+        max_digits=10, decimal_places=2, required=False
+    )
+
+    def validate_final_price(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError("Final price must be greater than zero")
+        return value
+
+    def validate(self, attrs):
+        apt: Appointment = self.context["appointment"]
+        if not apt.can_transition_to(Appointment.Status.COMPLETED):
+            raise serializers.ValidationError(
+                f"Cannot complete an appointment with status '{apt.status}'."
+            )
+        return attrs
+
+class ConfirmAppointmentSerializer(serializers.Serializer):
+    def validate(self, attrs):
+        apt:Appointment = self.context["appointment"]
+        if not apt.can_transition_to(Appointment.Status.CONFIRMED):
+            raise serializers.ValidationError(
+                f"Cannot confirm an appointment with status '{apt.status}'."
+            )
+        return attrs
+
+class CancleAppointmentSerializer(serializers.Serializer):
+    reason = serializers.CharField(
+        max_length=500, required=False, allow_blank=True, default=""
+    )
+
+    def validate(self, attrs):
+        apt:Appointment = self.context["appointment"]
+        if not apt.can_transition_to(Appointment.Status.CANCELLED):
+            raise serializers.ValidationError(
+                f"Cannot cancel an appointment with status '{apt.status}'."
+            )
+        return attrs
+
+
+class DisputeAppointmentSerializer(serializers.Serializer):
+    seeker_statement = serializers.CharField(max_length=2000)
+
+    def validate(self, attrs):
+        apt:Appointment = self.context["appointment"]
+
+        if not Appointment.can_transition_to(Appointment.Status.DISPUTED):
+            raise serializers.ValidationError(
+                f"Cannot dispute an appointment with status '{apt.status}'."
+            )
+
+        if apt.completed_at:
+            deadline = apt.completed_at + timedelta(hours=48)
+            if timezone.now() > deadline:
+                raise serializers.ValidationError(
+                     "The 48-hour window to raise a dispute has passed."
+                )
+        return attrs

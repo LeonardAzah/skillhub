@@ -25,8 +25,21 @@ def _appointment_payload(appointment: Appointment) -> dict:
 
 def _get_appointment_or_404(pk):
     try:
-        return Appointment.objects.select_related(
-            "provider__user", "customer__user", "category"
-        ).prefetch_related("status_logs").get(id=pk), None
+        appointment = (
+            Appointment.objects.select_related(
+                "provider__user",
+                "provider__user__seeker_profile",
+                "provider__user__provider_profile",
+                "customer__seeker_profile",
+                "customer__provider_profile",
+                "category",
+            )
+            .prefetch_related("status_logs")
+            .get(id=pk)
+        )
+        return appointment, None
     except Appointment.DoesNotExist:
-        return None, error_response(message="Appointment not found.",  status_code=status.HTTP_404_NOT_FOUND)
+        return None, error_response(
+            message="Appointment not found.",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )

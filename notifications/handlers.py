@@ -10,9 +10,9 @@ Handlers are registered in the HANDLER_REGISTRY at the bottom of this file.
 The RabbitMQ consumer calls dispatch(event_type, payload) which resolves
 the right handler(s) and calls them.
 
-SRS §10.1 — full notification type catalogue
-SRS §10.2 — FCM push architecture
-SRS §10.3 — SES email architecture
+full notification type catalogue
+FCM push architecture
+SES email architecture
 """
 import logging
 from typing import Callable
@@ -20,87 +20,14 @@ from typing import Callable
 from .events import EventType
 from .models import Notification
 from accounts.models import User
-# from payments.tasks import on_appointment_created
+from payments.tasks import on_appointment_created
 
-
-
+from _helper import _create_notification, _enqueue_push, _enqueue_email, _check_preference, _notify_admins
 
 
 logger = logging.getLogger(__name__)
 
-
-# ─── Shared helpers ───────────────────────────────────────────────────────────
-
-def _create_notification(
-    user_id: str,
-    notification_type: str,
-    title: str,
-    body: str,
-    data: dict,
-    event_id: str = "",
-    event_type: str = "",
-) -> Notification | None:
-    """Persist in-app notification. Returns None if user not found."""
-    from accounts.models import User
-    try:
-        user = User.objects.get(id=user_id)
-    except User.DoesNotExist:
-        logger.warning("Notification skipped - user not found", extra={"user_id": user_id})
-        return None
-
-    # Idempotency: skip duplicate events
-    if event_id and Notification.objects.filter(event_id=event_id, user=user).exists():
-        logger.debug("Duplicate event skipped", extra={"event_id": event_id})
-        return None
-
-    return Notification.objects.create(
-        user=user,
-        notification_type=notification_type,
-        title=title,
-        body=body,
-        data=data,
-        event_id=event_id,
-        event_type=event_type,
-    )
-
-
-def _enqueue_push(user_id: str, title: str, body: str, data: dict) -> None:
-    """Enqueue FCM push notification Celery task."""
-    from .tasks import send_push_notification_task
-
-    try:
-        send_push_notification_task.apply_async(
-            kwargs={"user_id": user_id, "title": title, "body": body, "data": data},
-            queue="notifications",
-        )
-    except Exception as exc:
-        logger.error("Failed to enqueue push notification", extra={"user_id": user_id, "error": str(exc)})
-
-
-def _enqueue_email(user_id: str, template: str, context: dict, subject: str = "") -> None:
-    """Enqueue SES email Celery task."""
-    try:
-        from .tasks import send_email_notification_task
-        send_email_notification_task.apply_async(
-            kwargs={"user_id": user_id, "template": template, "context": context, "subject": subject},
-            queue="notifications",
-        )
-    except Exception as exc:
-        logger.error("Failed to enqueue email notification", extra={"user_id": user_id, "error": str(exc)})
-
-
-def _check_preference(user_id: str, notif_type: str, channel: str) -> bool:
-    """Return True if user has the given channel enabled for this notification type."""
-    from .models import NotificationPreference
-    pref = NotificationPreference.objects.filter(
-        user_id=user_id, notification_type=notif_type
-    ).first()
-    if pref is None:
-        return True  # default: all channels enabled
-    return getattr(pref, f"{channel}_enabled", True)
-
-
-# ─── Account handlers ─────────────────────────────────────────────────────────
+# Account handlers
 
 def handle_verification_requested(payload: dict, event_id: str = "") -> None:
     """
@@ -174,7 +101,7 @@ def handle_user_registered(payload: dict, event_id: str = "") -> None:
 
 
 def handle_kyc_submitted(payload: dict, event_id: str = "") -> None:
-    """SRS §10.1 — KYC submitted → Push to user, Email to admin."""
+    """KYC submitted → Push to user, Email to admin."""
     user_id = payload.get("user_id")
     notif_type = Notification.NotificationType.KYC_SUBMITTED
     title      = "KYC documents received"
@@ -195,7 +122,7 @@ def handle_kyc_submitted(payload: dict, event_id: str = "") -> None:
 
 
 def handle_kyc_approved(payload: dict, event_id: str = "") -> None:
-    """SRS §10.1 — KYC approved → Email + Push."""
+    """KYC approved → Email + Push."""
     user_id    = payload.get("user_id")
     notif_type = Notification.NotificationType.KYC_APPROVED
     title      = "Identity verified ✓"
@@ -208,7 +135,7 @@ def handle_kyc_approved(payload: dict, event_id: str = "") -> None:
 
 
 def handle_kyc_rejected(payload: dict, event_id: str = "") -> None:
-    """SRS §10.1 — KYC rejected → Email + Push with reason."""
+    """KYC rejected → Email + Push with reason."""
     user_id    = payload.get("user_id")
     reason     = payload.get("reason", "")
     notif_type = Notification.NotificationType.KYC_REJECTED
@@ -226,7 +153,7 @@ def handle_kyc_rejected(payload: dict, event_id: str = "") -> None:
 
 
 def handle_account_locked(payload: dict, event_id: str = "") -> None:
-    """SRS §4.5 — Account locked → Email alert."""
+    """Account locked → Email alert."""
     user_id         = payload.get("user_id")
     lockout_minutes = payload.get("lockout_minutes", 30)
     _enqueue_email(
@@ -246,99 +173,99 @@ def handle_password_changed(payload: dict, event_id: str = "") -> None:
     )
 
 
-# ─── Appointment handlers ─────────────────────────────────────────────────────
+# Appointment handlers 
 
-# def handle_appointment_created(payload: dict, event_id: str = "") -> None:
-#     """SRS §10.1 — New booking request → Push + Email to provider."""
-#     provider_id = payload.get("provider_id")
-#     notif_type  = Notification.NotificationType.BOOKING_REQUEST
-#     title       = "New booking request"
-#     body        = (
-#         f"You have a new booking request for {payload.get('category', 'a service')} "
-#         f"on {payload.get('scheduled_date', '')}."
-#     )
-#     data = {
-#         "type":           "booking_request",
-#         "appointment_id": payload.get("appointment_id"),
-#         "deep_link":      f"/appointments/{payload.get('appointment_id')}",
-#     }
+def handle_appointment_created(payload: dict, event_id: str = "") -> None:
+    """New booking request → Push + Email to provider."""
+    provider_id = payload.get("provider_id")
+    notif_type  = Notification.NotificationType.BOOKING_REQUEST
+    title       = "New booking request"
+    body        = (
+        f"You have a new booking request for {payload.get('category', 'a service')} "
+        f"on {payload.get('scheduled_date', '')}."
+    )
+    data = {
+        "type":           "booking_request",
+        "appointment_id": payload.get("appointment_id"),
+        "deep_link":      f"/appointments/{payload.get('appointment_id')}",
+    }
 
-#     _create_notification(provider_id, notif_type, title, body, data, event_id)
-#     _enqueue_push(provider_id, title, body, data)
-#     _enqueue_email(
-#         provider_id, "email/booking_request.html",
-#         {**payload, "title": title},
-#         subject=title,
-#     )
+    _create_notification(provider_id, notif_type, title, body, data, event_id)
+    _enqueue_push(provider_id, title, body, data)
+    _enqueue_email(
+        provider_id, "email/booking_request.html",
+        {**payload, "title": title},
+        subject=title,
+    )
 
-#     on_appointment_created.apply_async(
-#     kwargs={
-#         "appointment_id":   payload["appointment_id"],
-#         "seeker_user_id":   payload["seeker_id"],
-#         "provider_user_id": payload["provider_id"],
-#         "amount":           payload["quoted_price"],
-#     },
-#     queue="payments",
-# )
-
-
-# def handle_appointment_accepted(payload: dict, event_id: str = "") -> None:
-#     """SRS §10.1 — Booking accepted → Push + Email to seeker."""
-#     seeker_id  = payload.get("seeker_id")
-#     notif_type = Notification.NotificationType.BOOKING_ACCEPTED
-#     title      = "Booking accepted ✓"
-#     body       = "Your booking has been accepted. The provider will arrive at the scheduled time."
-#     data       = {
-#         "type":           "booking_accepted",
-#         "appointment_id": payload.get("appointment_id"),
-#         "deep_link":      f"/appointments/{payload.get('appointment_id')}",
-#     }
-
-#     _create_notification(seeker_id, notif_type, title, body, data, event_id)
-#     _enqueue_push(seeker_id, title, body, data)
-#     _enqueue_email(seeker_id, "email/booking_accepted.html", {**payload, "title": title}, subject=title)
-#     from ayments.tasks import on_appointment_accepted
-#     on_appointment_accepted.apply_async(
-#     kwargs={
-#         "appointment_id":   payload["appointment_id"],
-#         "seeker_user_id":   payload["seeker_id"],
-#         "provider_user_id": payload["provider_id"],
-#         "amount":           payload["quoted_price"],
-#     },
-#     queue="payments",
-# )
+    on_appointment_created.apply_async(
+    kwargs={
+        "appointment_id":   payload["appointment_id"],
+        "seeker_user_id":   payload["seeker_id"],
+        "provider_user_id": payload["provider_id"],
+        "amount":           payload["quoted_price"],
+    },
+    queue="payments",
+)
 
 
-# def handle_appointment_rejected(payload: dict, event_id: str = "") -> None:
-#     """SRS §10.1 — Booking rejected → Push + Email to seeker (escrow refunded)."""
-#     seeker_id  = payload.get("seeker_id")
-#     notif_type = Notification.NotificationType.BOOKING_REJECTED
-#     title      = "Booking declined"
-#     body       = "Your booking was declined by the provider. Your payment has been refunded."
-#     data       = {
-#         "type":           "booking_rejected",
-#         "appointment_id": payload.get("appointment_id"),
-#         "deep_link":      "/appointments",
-#     }
+def handle_appointment_accepted(payload: dict, event_id: str = "") -> None:
+    """Booking accepted → Push + Email to seeker."""
+    seeker_id  = payload.get("seeker_id")
+    notif_type = Notification.NotificationType.BOOKING_ACCEPTED
+    title      = "Booking accepted ✓"
+    body       = "Your booking has been accepted. The provider will arrive at the scheduled time."
+    data       = {
+        "type":           "booking_accepted",
+        "appointment_id": payload.get("appointment_id"),
+        "deep_link":      f"/appointments/{payload.get('appointment_id')}",
+    }
 
-#     _create_notification(seeker_id, notif_type, title, body, data, event_id)
-#     _enqueue_push(seeker_id, title, body, data)
-#     _enqueue_email(seeker_id, "email/booking_rejected.html", {**payload, "title": title}, subject=title)
+    _create_notification(seeker_id, notif_type, title, body, data, event_id)
+    _enqueue_push(seeker_id, title, body, data)
+    _enqueue_email(seeker_id, "email/booking_accepted.html", {**payload, "title": title}, subject=title)
+    from payments.tasks import on_appointment_accepted
+    on_appointment_accepted.apply_async(
+    kwargs={
+        "appointment_id":   payload["appointment_id"],
+        "seeker_user_id":   payload["seeker_id"],
+        "provider_user_id": payload["provider_id"],
+        "amount":           payload["quoted_price"],
+    },
+    queue="payments",
+)
 
-#     from payments.tasks import on_appointment_rejected_or_expired
-#     on_appointment_rejected_or_expired.apply_async(
-#     kwargs={
-#         "appointment_id":   payload["appointment_id"],
-#         "seeker_user_id":   payload["seeker_id"],
-#         "provider_user_id": payload["provider_id"],
-#         "amount":           payload["quoted_price"],
-#     },
-#     queue="payments",
-# )
+
+def handle_appointment_rejected(payload: dict, event_id: str = "") -> None:
+    """Booking rejected → Push + Email to seeker (escrow refunded)."""
+    seeker_id  = payload.get("seeker_id")
+    notif_type = Notification.NotificationType.BOOKING_REJECTED
+    title      = "Booking declined"
+    body       = "Your booking was declined by the provider. Your payment has been refunded."
+    data       = {
+        "type":           "booking_rejected",
+        "appointment_id": payload.get("appointment_id"),
+        "deep_link":      "/appointments",
+    }
+
+    _create_notification(seeker_id, notif_type, title, body, data, event_id)
+    _enqueue_push(seeker_id, title, body, data)
+    _enqueue_email(seeker_id, "email/booking_rejected.html", {**payload, "title": title}, subject=title)
+
+    from payments.tasks import on_appointment_rejected_or_expired
+    on_appointment_rejected_or_expired.apply_async(
+    kwargs={
+        "appointment_id":   payload["appointment_id"],
+        "seeker_user_id":   payload["seeker_id"],
+        "provider_user_id": payload["provider_id"],
+        "amount":           payload["quoted_price"],
+    },
+    queue="payments",
+)
 
 
 def handle_appointment_started(payload: dict, event_id: str = "") -> None:
-    """SRS §10.1 — Job started → Push to seeker."""
+    """Job started → Push to seeker."""
     seeker_id  = payload.get("seeker_id")
     notif_type = Notification.NotificationType.JOB_STARTED
     title      = "Job started"
@@ -354,7 +281,7 @@ def handle_appointment_started(payload: dict, event_id: str = "") -> None:
 
 
 def handle_appointment_completed(payload: dict, event_id: str = "") -> None:
-    """SRS §10.1 — Job marked complete → Push + Email to seeker to confirm or dispute."""
+    """Job marked complete → Push + Email to seeker to confirm or dispute."""
     seeker_id  = payload.get("seeker_id")
     notif_type = Notification.NotificationType.JOB_COMPLETED
     title      = "Job completed — please confirm"
@@ -371,7 +298,7 @@ def handle_appointment_completed(payload: dict, event_id: str = "") -> None:
 
 
 def handle_appointment_confirmed(payload: dict, event_id: str = "") -> None:
-    """SRS §10.1 — Seeker confirmed → Push + Email to provider (payment released)."""
+    """Seeker confirmed → Push + Email to provider (payment released)."""
     provider_id = payload.get("provider_id")
     notif_type  = Notification.NotificationType.JOB_CONFIRMED
     title       = "Job confirmed — payment released ✓"
@@ -387,64 +314,63 @@ def handle_appointment_confirmed(payload: dict, event_id: str = "") -> None:
     _enqueue_email(provider_id, "email/job_confirmed.html", {**payload, "title": title}, subject=title)
 
 
-# def handle_appointment_cancelled(payload: dict, event_id: str = "") -> None:
-#     """SRS §10.1 — Cancellation → Push + Email to both parties."""
-#     seeker_id   = payload.get("seeker_id")
-#     provider_id = payload.get("provider_id")
-#     notif_type  = Notification.NotificationType.BOOKING_CANCELLED
-#     title       = "Booking cancelled"
-#     body        = f"Appointment cancelled. Reason: {payload.get('reason', 'Not specified')}."
-#     data        = {
-#         "type":           "booking_cancelled",
-#         "appointment_id": payload.get("appointment_id"),
-#         "deep_link":      "/appointments",
-#     }
+def handle_appointment_cancelled(payload: dict, event_id: str = "") -> None:
+    """Cancellation → Push + Email to both parties."""
+    seeker_id   = payload.get("seeker_id")
+    provider_id = payload.get("provider_id")
+    notif_type  = Notification.NotificationType.BOOKING_CANCELLED
+    title       = "Booking cancelled"
+    body        = f"Appointment cancelled. Reason: {payload.get('reason', 'Not specified')}."
+    data        = {
+        "type":           "booking_cancelled",
+        "appointment_id": payload.get("appointment_id"),
+        "deep_link":      "/appointments",
+    }
 
-#     for uid in filter(None, [seeker_id, provider_id]):
-#         _create_notification(uid, notif_type, title, body, data, event_id + f"_{uid}")
-#         _enqueue_push(uid, title, body, data)
-#         _enqueue_email(uid, "email/booking_cancelled.html", {**payload, "title": title}, subject=title)
+    for uid in filter(None, [seeker_id, provider_id]):
+        _create_notification(uid, notif_type, title, body, data, event_id + f"_{uid}")
+        _enqueue_push(uid, title, body, data)
+        _enqueue_email(uid, "email/booking_cancelled.html", {**payload, "title": title}, subject=title)
     
-#     from payments.tasks import on_appointment_cancelled
-#     on_appointment_cancelled.apply_async(
-#     kwargs={
-#         "appointment_id":   payload["appointment_id"],
-#         "seeker_user_id":   payload["seeker_id"],
-#         "provider_user_id": payload["provider_id"],
-#         "amount":           payload["quoted_price"],
-#     },
-#     queue="payments",
-# )
+    from payments.tasks import on_appointment_cancelled
+    on_appointment_cancelled.apply_async(
+    kwargs={
+        "appointment_id":   payload["appointment_id"],
+        "seeker_user_id":   payload["seeker_id"],
+        "provider_user_id": payload["provider_id"],
+        "amount":           payload["quoted_price"],
+    },
+    queue="payments",
+)
     
     
 
+def handle_appointment_expired(payload: dict, event_id: str = "") -> None:
+    """EXPIRED (24h no provider response) → Push + Email to seeker."""
+    seeker_id  = payload.get("seeker_id")
+    notif_type = Notification.NotificationType.BOOKING_EXPIRED
+    title      = "Booking expired — refund issued"
+    body       = "The provider did not respond within 24 hours. Your payment has been refunded."
+    data       = {"type": "booking_expired", "appointment_id": payload.get("appointment_id"), "deep_link": "/appointments"}
 
-# def handle_appointment_expired(payload: dict, event_id: str = "") -> None:
-#     """SRS §7.4 — EXPIRED (24h no provider response) → Push + Email to seeker."""
-#     seeker_id  = payload.get("seeker_id")
-#     notif_type = Notification.NotificationType.BOOKING_EXPIRED
-#     title      = "Booking expired — refund issued"
-#     body       = "The provider did not respond within 24 hours. Your payment has been refunded."
-#     data       = {"type": "booking_expired", "appointment_id": payload.get("appointment_id"), "deep_link": "/appointments"}
+    _create_notification(seeker_id, notif_type, title, body, data, event_id)
+    _enqueue_push(seeker_id, title, body, data)
+    _enqueue_email(seeker_id, "email/booking_expired.html", {**payload, "title": title}, subject=title)
 
-#     _create_notification(seeker_id, notif_type, title, body, data, event_id)
-#     _enqueue_push(seeker_id, title, body, data)
-#     _enqueue_email(seeker_id, "email/booking_expired.html", {**payload, "title": title}, subject=title)
-
-#     from payments.tasks import on_appointment_rejected_or_expired
-#     on_appointment_rejected_or_expired.apply_async(
-#     kwargs={
-#         "appointment_id":   payload["appointment_id"],
-#         "seeker_user_id":   payload["seeker_id"],
-#         "provider_user_id": payload["provider_id"],
-#         "amount":           payload["quoted_price"],
-#     },
-#     queue="payments",
-# )
+    from payments.tasks import on_appointment_rejected_or_expired
+    on_appointment_rejected_or_expired.apply_async(
+    kwargs={
+        "appointment_id":   payload["appointment_id"],
+        "seeker_user_id":   payload["seeker_id"],
+        "provider_user_id": payload["provider_id"],
+        "amount":           payload["quoted_price"],
+    },
+    queue="payments",
+)
 
 
 def handle_appointment_auto_released(payload: dict, event_id: str = "") -> None:
-    """SRS §7.4 — AUTO_RELEASED (48h no seeker response) → Push + Email to both."""
+    """AUTO_RELEASED (48h no seeker response) → Push + Email to both."""
     seeker_id   = payload.get("seeker_id")
     provider_id = payload.get("provider_id")
     notif_type  = Notification.NotificationType.ESCROW_AUTO_RELEASED
@@ -464,20 +390,20 @@ def handle_appointment_auto_released(payload: dict, event_id: str = "") -> None:
         _enqueue_push(provider_id, provider_title, provider_body, data)
         _enqueue_email(provider_id, "email/auto_released.html", {**payload, "title": provider_title}, subject=provider_title)
 
-#     from payments.tasks import on_appointment_auto_released
-#     on_appointment_auto_released.apply_async(
-#     kwargs={
-#         "appointment_id":   payload["appointment_id"],
-#         "seeker_user_id":   payload["seeker_id"],
-#         "provider_user_id": payload["provider_id"],
-#         "amount":           payload["quoted_price"],
-#     },
-#     queue="payments",
-# )
+    from payments.tasks import on_appointment_auto_released
+    on_appointment_auto_released.apply_async(
+    kwargs={
+        "appointment_id":   payload["appointment_id"],
+        "seeker_user_id":   payload["seeker_id"],
+        "provider_user_id": payload["provider_id"],
+        "amount":           payload["quoted_price"],
+    },
+    queue="payments",
+)
 
 
 def handle_appointment_reminder(payload: dict, event_id: str = "", hours: int = 24) -> None:
-    """SRS §10.1 — T-24h and T-2h reminders → Push to both parties."""
+    """T-24h and T-2h reminders → Push to both parties."""
     seeker_id   = payload.get("seeker_id")
     provider_id = payload.get("provider_id")
     notif_type  = (
@@ -501,10 +427,10 @@ def handle_appointment_reminder(payload: dict, event_id: str = "", hours: int = 
         _enqueue_push(uid, title, body, data)
 
 
-# ─── Payment handlers ─────────────────────────────────────────────────────────
+# Payment handlers
 
 def handle_wallet_credited(payload: dict, event_id: str = "") -> None:
-    """SRS §10.1 — Wallet top-up → Email + Push."""
+    """Wallet top-up → Email + Push."""
     user_id    = payload.get("user_id")
     amount     = payload.get("amount", 0)
     currency   = payload.get("currency", "XAF")
@@ -519,7 +445,7 @@ def handle_wallet_credited(payload: dict, event_id: str = "") -> None:
 
 
 def handle_withdrawal_initiated(payload: dict, event_id: str = "") -> None:
-    """SRS §10.1 — Withdrawal initiated → Email + Push."""
+    """Withdrawal initiated → Email + Push."""
     user_id    = payload.get("user_id")
     amount     = payload.get("amount", 0)
     currency   = payload.get("currency", "XAF")
@@ -534,7 +460,7 @@ def handle_withdrawal_initiated(payload: dict, event_id: str = "") -> None:
 
 
 def handle_withdrawal_completed(payload: dict, event_id: str = "") -> None:
-    """SRS §10.1 — Withdrawal completed → Email + Push."""
+    """Withdrawal completed → Email + Push."""
     user_id    = payload.get("user_id")
     amount     = payload.get("amount", 0)
     currency   = payload.get("currency", "XAF")
@@ -562,10 +488,10 @@ def handle_withdrawal_failed(payload: dict, event_id: str = "") -> None:
     _enqueue_email(user_id, "email/withdrawal_failed.html", {**payload, "title": title}, subject=title)
 
 
-# ─── Review handlers ─────────────────────────────────────────────────────────
+# Review handlers
 
 def handle_review_created(payload: dict, event_id: str = "") -> None:
-    """SRS §8.14 — New review → Push to provider."""
+    """New review → Push to provider."""
     provider_id   = payload.get("provider_id")
     overall       = payload.get("overall_rating", "")
     notif_type    = Notification.NotificationType.REVIEW_RECEIVED
@@ -583,7 +509,7 @@ def handle_review_created(payload: dict, event_id: str = "") -> None:
 
 
 def handle_review_reminder(payload: dict, event_id: str = "", days: int = 3) -> None:
-    """SRS §8.14 — Review reminder at T+3 and T+10 days."""
+    """Review reminder at T+3 and T+10 days."""
     seeker_id  = payload.get("seeker_id")
     notif_type = Notification.NotificationType.REVIEW_REMINDER
     title      = "How was your experience?"
@@ -599,7 +525,7 @@ def handle_review_reminder(payload: dict, event_id: str = "", days: int = 3) -> 
 
 
 def handle_review_flagged(payload: dict, event_id: str = "") -> None:
-    """SRS §8.14 — Review flagged → Email to reviewer."""
+    """Review flagged → Email to reviewer."""
     reviewer_id = payload.get("reviewer_id")
     notif_type  = Notification.NotificationType.REVIEW_FLAGGED
     title       = "Your review is under moderation"
@@ -611,7 +537,7 @@ def handle_review_flagged(payload: dict, event_id: str = "") -> None:
 
 
 def handle_review_removed(payload: dict, event_id: str = "") -> None:
-    """SRS §8.14 — Review removed → Email to reviewer with reason."""
+    """Review removed → Email to reviewer with reason."""
     reviewer_id = payload.get("reviewer_id")
     reason      = payload.get("reason", "")
     notif_type  = Notification.NotificationType.REVIEW_REMOVED
@@ -624,7 +550,7 @@ def handle_review_removed(payload: dict, event_id: str = "") -> None:
 
 
 def handle_review_response_added(payload: dict, event_id: str = "") -> None:
-    """SRS §8.14 — Provider replied to review → Push to reviewer."""
+    """Provider replied to review → Push to reviewer."""
     reviewer_id = payload.get("reviewer_id")
     notif_type  = Notification.NotificationType.REVIEW_RESPONSE
     title       = "The provider replied to your review"
@@ -636,7 +562,7 @@ def handle_review_response_added(payload: dict, event_id: str = "") -> None:
 
 
 def handle_provider_rating_low(payload: dict, event_id: str = "") -> None:
-    """SRS §8.14 — Rating drops below 2.5 → Email to admin."""
+    """Rating drops below 2.5 → Email to admin."""
     provider_id = payload.get("provider_id")
     avg         = payload.get("avg_overall")
     total       = payload.get("total_reviews")
@@ -648,10 +574,10 @@ def handle_provider_rating_low(payload: dict, event_id: str = "") -> None:
     )
 
 
-# ─── Dispute handlers ─────────────────────────────────────────────────────────
+# Dispute handlers
 
 def handle_dispute_raised(payload: dict, event_id: str = "") -> None:
-    """SRS §10.1 — Dispute raised → Push + Email to both parties + admin."""
+    """Dispute raised → Push + Email to both parties + admin."""
     seeker_id   = payload.get("seeker_id")
     provider_id = payload.get("provider_id")
     notif_type  = Notification.NotificationType.DISPUTE_RAISED
@@ -677,7 +603,7 @@ def handle_dispute_raised(payload: dict, event_id: str = "") -> None:
 
 
 def handle_dispute_resolved(payload: dict, event_id: str = "") -> None:
-    """SRS §10.1 — Dispute resolved → Push + Email to both parties."""
+    """Dispute resolved → Push + Email to both parties."""
     seeker_id   = payload.get("seeker_id")
     provider_id = payload.get("provider_id")
     resolution  = payload.get("resolution", "")
@@ -698,7 +624,7 @@ def handle_dispute_resolved(payload: dict, event_id: str = "") -> None:
         _enqueue_email(uid, "email/dispute_resolved.html", {**payload, "title": title}, subject=title)
 
 
-# ─── Admin broadcast ─────────────────────────────────────────────────────────
+# Admin broadcast 
 
 def handle_admin_broadcast(payload: dict, event_id: str = "") -> None:
     """Admin sends a platform-wide or role-targeted push + in-app notification."""
@@ -718,18 +644,7 @@ def handle_admin_broadcast(payload: dict, event_id: str = "") -> None:
         _create_notification(uid, notif_type, title, body, data, event_id + f"_{uid}")
         _enqueue_push(uid, title, body, data)
 
-
-# ─── Internal helper: notify all admins ──────────────────────────────────────
-
-def _notify_admins(title: str, body: str, data: dict, event_id: str = "") -> None:
-    """Utility: create in-app notification + email for all admin users."""
-    admins = User.objects.filter(role="admin", is_active=True)
-    for admin in admins:
-        _create_notification(str(admin.id), Notification.NotificationType.SYSTEM, title, body, data, event_id + f"_{admin.id}")
-        _enqueue_email(str(admin.id), "email/admin_alert.html", {"title": title, "body": body, **data}, subject=title)
-
-
-# ─── Handler registry ─────────────────────────────────────────────────────────
+# Handler registry
 
 from .events import EventType
 
@@ -745,14 +660,14 @@ HANDLER_REGISTRY: dict[str, list[Callable]] = {
     EventType.USER_KYC_APPROVED:         [handle_kyc_approved],
     EventType.USER_KYC_REJECTED:         [handle_kyc_rejected],
     # Appointments
-    # EventType.APPOINTMENT_CREATED:       [handle_appointment_created],
-    # EventType.APPOINTMENT_ACCEPTED:      [handle_appointment_accepted],
-    # EventType.APPOINTMENT_REJECTED:      [handle_appointment_rejected],
+    EventType.APPOINTMENT_CREATED:       [handle_appointment_created],
+    EventType.APPOINTMENT_ACCEPTED:      [handle_appointment_accepted],
+    EventType.APPOINTMENT_REJECTED:      [handle_appointment_rejected],
     EventType.APPOINTMENT_STARTED:       [handle_appointment_started],
     EventType.APPOINTMENT_COMPLETED:     [handle_appointment_completed],
     EventType.APPOINTMENT_CONFIRMED:     [handle_appointment_confirmed],
-    # EventType.APPOINTMENT_CANCELLED:     [handle_appointment_cancelled],
-    # EventType.APPOINTMENT_EXPIRED:       [handle_appointment_expired],
+    EventType.APPOINTMENT_CANCELLED:     [handle_appointment_cancelled],
+    EventType.APPOINTMENT_EXPIRED:       [handle_appointment_expired],
     EventType.APPOINTMENT_AUTO_RELEASED: [handle_appointment_auto_released],
     EventType.APPOINTMENT_REMINDER_24H:  [lambda p, eid="": handle_appointment_reminder(p, eid, hours=24)],
     EventType.APPOINTMENT_REMINDER_2H:   [lambda p, eid="": handle_appointment_reminder(p, eid, hours=2)],

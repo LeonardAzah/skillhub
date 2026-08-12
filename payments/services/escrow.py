@@ -16,7 +16,7 @@ from ..models import EscrowAccount, Transaction, Wallet
 def hold_escrow(appointment_id: str, seeker_user_id: str, provider_user_id: str,
                 amount: Decimal, idempotency_key: str) -> EscrowAccount:
     """
-    SRS §9.3 — Deduct amount from seeker balance → escrow_balance.
+    Deduct amount from seeker balance → escrow_balance.
     Creates an EscrowAccount and a ESCROW_HOLD Transaction.
     Also stamps appointment.escrow_transaction_id.
     """
@@ -79,7 +79,7 @@ def hold_escrow(appointment_id: str, seeker_user_id: str, provider_user_id: str,
 @db_transaction.atomic
 def release_escrow(appointment_id: str, idempotency_key: str) -> Transaction:
     """
-    SRS §9.3 — Release escrow to provider after CONFIRMED or AUTO_RELEASED.
+    Release escrow to provider after CONFIRMED or AUTO_RELEASED.
     Deducts platform fee; credits provider wallet.
     """
     existing = check_idempotency(idempotency_key)
@@ -152,8 +152,8 @@ def release_escrow(appointment_id: str, idempotency_key: str) -> Transaction:
 def refund_escrow(appointment_id: str, idempotency_key: str,
                   partial_amount: Decimal | None = None) -> Transaction:
     """
-    SRS §9.3 — Refund escrow to seeker (REJECTED, EXPIRED, CANCELLED).
-    partial_amount allows the SRS §7.5 split refund (late cancellation).
+    Refund escrow to seeker (REJECTED, EXPIRED, CANCELLED).
+    partial_amount allows the split refund (late cancellation).
     """
     existing = check_idempotency(idempotency_key)
     if existing:
