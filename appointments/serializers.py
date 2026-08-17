@@ -17,7 +17,7 @@ from rest_framework import serializers
 from rest_framework import status
 
 from .models import Appointment, AppointmentStatusLog, ProviderAvailability
-from ._helper import _wallet_pin_token_key
+from .helper import _wallet_pin_token_key
 
 from accounts.models import ProviderProfile, User
 from categories.models import Category, ProviderCategory
@@ -312,7 +312,7 @@ class CompleteAppointmentSerializer(serializers.Serializer):
         help_text="S3/cloudinary URL of the completion photo/video."
     )
     completion_notes = serializers.CharField(
-        max_lenght=1000, required=False, allow_blank=True, default=""
+        max_length=1000, required=False, allow_blank=True, default=""
     )
     final_price = serializers.DecimalField(
         max_digits=10, decimal_places=2, required=False

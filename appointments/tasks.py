@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from .models import Appointment
 
-from notifications.events import EventType
+from utils.events import EventType
 from notifications.publisher import publish_event
 from accounts.models import ProviderProfile
 

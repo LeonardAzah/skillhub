@@ -10,7 +10,7 @@ from utils.helpers import _frontend_url, _setting
 from ..models import User, EmailVerificationToken
 from ..serializers import EmailVerifySerializer, ResendVerificationSerializer, UserSummarySerializer
 
-from notifications.events import EventType
+from utils.events import EventType
 from notifications.publisher import publish_event
 
 

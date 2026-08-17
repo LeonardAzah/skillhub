@@ -9,7 +9,7 @@ from rest_framework.throttling import AnonRateThrottle
 from drf_spectacular.utils import extend_schema
 
 
-from notifications.events import EventType
+from utils.events import EventType
 from notifications.publisher import publish_event
 from utils.helpers import get_client_ip, _frontend_url, _setting
 

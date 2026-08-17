@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from django.db import transaction as db_transaction
 
-from notifications.events import EventType
+from utils.events import EventType
 from notifications.publisher import publish_event
 
 from ._helpers import check_idempotency, get_wallet

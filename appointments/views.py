@@ -3,8 +3,8 @@ from datetime import date, timedelta, time
 
 from django.db import transaction
 
-from rest_framework import status, permissions
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework import status
+from rest_framework.permissions import  IsAuthenticated, BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.generics import ListCreateAPIView, RetrieveAPIView
@@ -25,19 +25,18 @@ from .serializers import (
 
     )
 
-from _helper import _get_appointment_or_404, _appointment_payload
+from .helper import _get_appointment_or_404, _appointment_payload
 
 from accounts.models import ProviderProfile, User
-from utils.permissions import IsAdmin, IsProvider, IsVerified
+from utils.permissions import  IsProvider, IsVerified
 from notifications.publisher import publish_event
-from notifications.events import EventType
-from categories.models import Category, ProviderCategory
+from utils.events import EventType
 from utils.exceptions import error_response
 
 logger = logging.getLogger(__name__)
 
 
-class IsAppointmentParty(permissions.BasePermission):
+class IsAppointmentParty(BasePermission):
     """Allow the customer, the provider, or staff/admin."""
 
     def has_object_permission(self, request, view, obj: Appointment) -> bool:
@@ -267,7 +266,7 @@ class AppointmentDetailView(RetrieveAPIView):
         "category",
         )
     serializer_class = AppointmentSerializer
-    permission_classes = [permissions.IsAuthenticated, IsAppointmentParty]
+    permission_classes = [IsAuthenticated, IsAppointmentParty]
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()

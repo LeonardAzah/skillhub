@@ -13,7 +13,7 @@ from django.conf import settings
 def _emit_account_locked(user, lockout_minutes: int) -> None:
     """Fire-and-forget domain event when an account is locked out."""
     try:
-        from notifications.events import EventType
+        from utils.events import EventType
         from notifications.publisher import publish_event
         publish_event(EventType.USER_ACCOUNT_LOCKED, {
             "user_id":         str(user.id),
