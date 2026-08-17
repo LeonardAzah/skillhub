@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'categories',
     'payments',
     'appointments',
+    'disputes',
 ]
 
 MIDDLEWARE = [

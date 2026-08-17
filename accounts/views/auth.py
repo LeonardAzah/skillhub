@@ -12,7 +12,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from ..models import User, EmailVerificationToken, DeviceToken
 from ..serializers import (RegisterSerializer, UserSummarySerializer, LogoutSerializer, GoogleAuthSerializer)
 
-from notifications.events import EventType
+from utils.events import EventType
 from notifications.publisher import publish_event
 from utils.helpers import _setting, _frontend_url
 

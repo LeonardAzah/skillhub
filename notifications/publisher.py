@@ -21,8 +21,7 @@ import traceback
 import pika
 from django.conf import settings
 
-from .events import Event, EventType
-from .tasks import deliver_event_via_celery
+from utils.events import Event
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +126,7 @@ def publish_event(event_type: str, payload: dict | None = None) -> bool:
             extra={"event_type": event_type, "error": str(exc)},
         )
         try:
-            
+            from .tasks import deliver_event_via_celery
             deliver_event_via_celery.apply_async(
                 kwargs={"event_type": event_type, "payload": payload, "event_id": event.event_id},
                 queue="notifications",

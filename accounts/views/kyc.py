@@ -18,7 +18,7 @@ from ..filters import KYCSubmissionFilter
 
 from utils.permissions import IsAdmin, IsEmailVerified
 from utils.exceptions import error_response
-from notifications.events import EventType
+from utils.events import EventType
 from notifications.publisher import publish_event
 
 from drf_spectacular.utils import extend_schema

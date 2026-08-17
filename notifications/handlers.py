@@ -17,7 +17,7 @@ SES email architecture
 import logging
 from typing import Callable
 
-from .events import EventType
+from ..utils.events import EventType
 from .models import Notification
 from accounts.models import User
 from payments.tasks import on_appointment_created
@@ -646,7 +646,7 @@ def handle_admin_broadcast(payload: dict, event_id: str = "") -> None:
 
 # Handler registry
 
-from .events import EventType
+from ..utils.events import EventType
 
 HANDLER_REGISTRY: dict[str, list[Callable]] = {
     # Accounts
