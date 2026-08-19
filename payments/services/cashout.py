@@ -1,55 +1,28 @@
 import uuid
 
-from django.db import IntegrityError, transaction
-from django.utils import timezone
+from django.db import transaction
 
+from payments.providers.fapshi.client import FapshiClient
 from payments.models import Payment, Wallet
 
-from .providers import initiate_provider_cash_out,release_cashout_reservation
+from ..exceptions import CashOutProviderError, InsufficientFundsError
 
-class CashOutError(Exception):
-    """Base exception for cash-out failures."""
-
-
-class InsufficientFundsError(CashOutError):
-    pass
-
-
-class CashOutServiceError(CashOutError):
-    pass
-
+from .wallet import release_cashout_reservation
 
 def initiate_cash_out(
     *,
     user,
-    wallet: Wallet,
+    wallet,
     amount,
     method,
     recipient_reference,
     recipient_name="",
     idempotency_key,
-) -> Payment:
+):
     """
-    Create and initiate a cash-out payment.
-
-    Responsibilities:
-        1. Guarantee idempotency.
-        2. Lock the wallet.
-        3. Re-check available balance.
-        4. Reserve the requested funds.
-        5. Create the Payment record.
-        6. Initiate the external provider payment.
-        7. Update Payment with provider information.
-
-    The wallet is NOT permanently debited here.
-
-    Permanent debit + LedgerEntry creation happen when the
-    provider confirms the cash-out through its webhook.
+    Create an internal Payment and initiate Fapshi checkout.
+    Reserve wallet funds and initiate a Fapshi payout.
     """
-
-    # ---------------------------------------------------------
-    # 1. Fast idempotency lookup
-    # ---------------------------------------------------------
 
     existing_payment = (
         Payment.objects
@@ -63,137 +36,98 @@ def initiate_cash_out(
     if existing_payment:
         return existing_payment
 
-    # ---------------------------------------------------------
-    # 2. Create payment + reserve funds atomically
-    # ---------------------------------------------------------
+    with transaction.atomic():
 
-    try:
-        with transaction.atomic():
-
-            # Always get the wallet again with a row lock.
-            #
-            # The wallet passed into the service may have been
-            # loaded before another request changed it.
-            wallet = (
-                Wallet.objects
-                .select_for_update()
-                .get(
-                    pk=wallet.pk,
-                    user=user,
-                    is_active=True,
-                )
-            )
-
-            # -------------------------------------------------
-            # Re-check balance under the lock
-            # -------------------------------------------------
-
-            if wallet.available_balance < amount:
-                raise InsufficientFundsError(
-                    f"Insufficient available balance. "
-                    f"Available: {wallet.available_balance} "
-                    f"{wallet.currency}."
-                )
-
-            # -------------------------------------------------
-            # Generate internal reference
-            # -------------------------------------------------
-
-            internal_reference = (
-                f"BOLO-{uuid.uuid4().hex[:12].upper()}"
-            )
-
-            # -------------------------------------------------
-            # Reserve funds
-            # -------------------------------------------------
-
-            wallet.reserved_balance += amount
-
-            wallet.save(
-                update_fields=[
-                    "reserved_balance",
-                    "updated_at",
-                ]
-            )
-
-            # -------------------------------------------------
-            # Create Payment
-            # -------------------------------------------------
-
-            payment = Payment.objects.create(
+        wallet = (
+            Wallet.objects
+            .select_for_update()
+            .get(
+                pk=wallet.pk,
                 user=user,
-                wallet=wallet,
-                provider=method,
-                direction=Payment.Direction.CASH_OUT,
-                amount=amount,
-                currency=wallet.currency,
-                status=Payment.Status.INITIATED,
-                idempotency_key=idempotency_key,
-                internal_reference=internal_reference,
-                metadata={
-                    "recipient_reference": recipient_reference,
-                    "recipient_name": recipient_name,
-                },
+                is_active=True,
             )
-
-    except IntegrityError:
-        # Another request may have created the same payment
-        # concurrently using the same idempotency key.
-        existing_payment = (
-            Payment.objects
-            .filter(
-                user=user,
-                idempotency_key=idempotency_key,
-            )
-            .first()
         )
 
-        if existing_payment:
-            return existing_payment
+        # IMPORTANT: authoritative balance check
+        if wallet.available_balance < amount:
+            raise InsufficientFundsError(
+                f"Insufficient available balance. "
+                f"Available: {wallet.available_balance} "
+                f"{wallet.currency}."
+            )
 
-        raise
+        payment = Payment.objects.create(
+            user=user,
+            wallet=wallet,
+            provider=Payment.Provider.FAPSHI,
+            method=method,
+            direction=Payment.Direction.CASH_OUT,
+            amount=amount,
+            currency=wallet.currency,
+            status=Payment.Status.INITIATED,
+            idempotency_key=idempotency_key,
+            phone_number=recipient_reference,
+            internal_reference=(
+                f"BOLO-{uuid.uuid4().hex[:12].upper()}"
+            ),
+            metadata={
+                "recipient_reference": recipient_reference,
+                "recipient_name": recipient_name,
+            },
+        )
 
-    # ---------------------------------------------------------
-    # 3. Call external provider OUTSIDE database transaction
-    # ---------------------------------------------------------
+        # Reserve funds
+        wallet.reserved_balance += amount
+
+        wallet.save(
+            update_fields=[
+                "reserved_balance",
+                "updated_at",
+            ]
+        )
 
     try:
-        provider_response = initiate_provider_cash_out(
-            payment=payment,
-            recipient_reference=recipient_reference,
+        client = FapshiClient()
+
+        response = client.payout(
+            amount=int(amount),
+            phone=recipient_reference,
+            name=recipient_name or None,
+            email=user.email,
+            user_id=str(user.id),
+            external_id=str(payment.id),
+            medium="mobile_money",
+            message=(
+                f"Wallet withdrawal "
+                f"{payment.internal_reference}"
+            ),
         )
 
     except Exception as exc:
-        # The provider call failed before the payout was
-        # successfully initiated.
         release_cashout_reservation(
-            payment_id=payment.id,
-            reason=str(exc),
-        )
-
-        raise CashOutServiceError(
-            "Unable to initiate cash-out with payment provider."
+                payment=payment, 
+                status=Payment.Status.FAILED,
+                reason="Unable to initiate cashout with fapshi."
+            )
+        
+        raise CashOutProviderError(
+            "Unable to initiate payout."
         ) from exc
 
-    # ---------------------------------------------------------
-    # 4. Update payment with provider information
-    # ---------------------------------------------------------
+
+    payment.provider_reference = response.get("transId")
 
     payment.status = Payment.Status.PENDING
 
-    payment.provider_reference = (
-        provider_response["provider_reference"]
-    )
-
     payment.metadata = {
         **payment.metadata,
-        "provider_response": provider_response,
+        "fapshi_response": response,
     }
 
     payment.save(
         update_fields=[
-            "status",
             "provider_reference",
+            "status",
             "metadata",
             "updated_at",
         ]
