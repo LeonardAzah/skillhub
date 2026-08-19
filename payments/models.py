@@ -182,7 +182,7 @@ class Payment(models.Model):
 
     class Method(models.TextChoices):
         MTN_MOBILE_MONEY = "mtn_mobile_money", "Mobile Money"
-        ORANGE_MONEY = "orange_money", "Mobile Money"
+        ORANGE_MONEY = "orange_money", "Orange Money"
         BANK_TRANSFER = "bank_transfer", "Bank Transfer"
 
     class Direction(models.TextChoices):
@@ -239,6 +239,12 @@ class Payment(models.Model):
         default="XAF",
     )
 
+    phone_number = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+    )
+
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
@@ -271,6 +277,7 @@ class Payment(models.Model):
         max_length=255,
         blank=True,
         default="",
+        db_index=True,
     )
 
     checkout_url = models.URLField(

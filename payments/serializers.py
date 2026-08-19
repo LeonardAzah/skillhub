@@ -20,6 +20,9 @@ from .models import EscrowAccount, Transaction, Wallet, WalletPin, Payment
 
 PIN_RE = re.compile(r"^\d{4}$")
 
+MIN_CASHIN_AMOUNT = Decimal("500.00")
+
+
 
 def _validate_pin_format(value: str) -> str:
     if not PIN_RE.match(str(value)):
@@ -151,35 +154,132 @@ class WalletSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+# class CashInInitiateSerializer(serializers.Serializer):
+#     """
+#     Initiate a wallet top-up. Returns a gateway URL to redirect the user.
+#     """
+#     amount   = serializers.DecimalField(max_digits=15, decimal_places=2)
+#     currency = serializers.CharField(default="XAF", max_length=3)
+#     phone_number = serializers.CharField()
+#     method = serializers.CharField()
+
+#     def validate_phone_number(self, value):
+#             if value and not re.match(r"^6\d{8}$", value):
+#                 raise serializers.ValidationError("Phone must be exactly 9 digits and start with 6, e.g. 612345678")
+#             return value
+
+#     def validate_amount(self, value):
+#         if value <= Decimal("500"):
+#             raise serializers.ValidationError("Amount must be greater than 500 XAF.")
+#         return value
+
 class CashInInitiateSerializer(serializers.Serializer):
-    """
-    Initiate a wallet top-up. Returns a gateway URL to redirect the user.
-    """
-    amount   = serializers.DecimalField(max_digits=15, decimal_places=2)
-    currency = serializers.CharField(default="XAF", max_length=3)
+    
+    amount = serializers.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        min_value=MIN_CASHIN_AMOUNT,
+    )
 
-    def validate_amount(self, v):
-        if v <= Decimal("500"):
-            raise serializers.ValidationError("Amount must be greater than 500 XAF.")
-        return v
+    currency = serializers.ChoiceField(
+        choices=["XAF"],
+        default="XAF",
+    )
+
+    phone_number = serializers.CharField(
+        max_length=20,
+        trim_whitespace=True,
+    )
+
+    method = serializers.ChoiceField(
+        choices=Payment.Method.choices,
+    )
+
+    idempotency_key = serializers.UUIDField(
+        default=uuid.uuid4,
+        help_text="Unique key used to safely retry the request.",
+    )
+
+    def validate_phone_number(self, value):
+        value = value.strip()
+
+        if not re.fullmatch(r"6\d{8}", value):
+            raise serializers.ValidationError(
+                "Phone number must contain exactly 9 digits "
+                "and start with 6, e.g. 612345678."
+            )
+
+        return value
+
+    def validate_amount(self, value):
+        """
+        Validate minimum cash-in amount.
+        """
+
+        if value < MIN_CASHIN_AMOUNT:
+            raise serializers.ValidationError(
+                f"Minimum cash-in amount is "
+                f"{MIN_CASHIN_AMOUNT} XAF."
+            )
+
+        return value
+
+    def validate_currency(self, value):
+        """
+        Normalize currency.
+        """
+        return value.upper()
+
+    def validate(self, attrs):
+        """
+        Cross-field/business validation.
+        """
+
+        wallet = self.context.get("wallet")
+
+        if wallet is None:
+            raise serializers.ValidationError(
+                "Wallet is required."
+            )
+
+        if not wallet.is_active:
+            raise serializers.ValidationError(
+                "Your wallet is currently inactive."
+            )
+
+        method = attrs["method"]
+
+        if method == Payment.Method.BANK_TRANSFER:
+            raise serializers.ValidationError(
+                {
+                    "method": (
+                        "Bank transfer is not currently "
+                        "supported for wallet cash-in."
+                    )
+                }
+            )
+
+        if attrs["currency"] != wallet.currency:
+            raise serializers.ValidationError(
+                {
+                    "currency": (
+                        f"Wallet currency is {wallet.currency}."
+                    )
+                }
+            )
 
 
-class CashInWebhookSerializer(serializers.Serializer):
-    """
-    Gateway webhook — validates HMAC signature, returns idempotency key.
-    """
-    event          = serializers.CharField()
-    transaction_id = serializers.CharField()
-    amount         = serializers.DecimalField(max_digits=15, decimal_places=2)
-    currency       = serializers.CharField(max_length=3)
-    user_id        = serializers.UUIDField()
-    status         = serializers.CharField()
+        if method not in {
+            Payment.Method.MTN_MOBILE_MONEY,
+            Payment.Method.ORANGE_MONEY,
+        }:
+            raise serializers.ValidationError(
+                {
+                    "method": "Unsupported cash-in method."
+                }
+            )
 
-    def validate_amount(self, v):
-        if v <= 0:
-            raise serializers.ValidationError("Amount must be positive.")
-        return v
-
+        return attrs
 
 
 class TransactionSerializer(serializers.ModelSerializer):

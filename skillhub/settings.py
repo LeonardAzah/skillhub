@@ -304,3 +304,9 @@ SPECTACULAR_SETTINGS = {
         "persistAuthorization": True,
     },
 }
+
+#Fapshi
+
+FAPSHI_BASE_URL= config("FAPSHI_BASE_URL", default="https://live.fapshi.com")
+FAPSHI_APIUSER=config("FAPSHI_API_USER", default='')
+FAPSHI_APIKEY=config("FAPSHI_API_KEY",default="" )

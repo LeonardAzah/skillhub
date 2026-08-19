@@ -30,7 +30,7 @@ from ..serializers import (
 )
 from ..filters import TransactionFilter,PaymentFilter, AmountBracketFilterBackend
 
-from ..services import initiate_cash_out
+from ..services import initiate_cash_out, initiate_cash_in
 
 from ._helpers import get_or_create_wallet
 
@@ -105,6 +105,8 @@ class CashInView(APIView):
 
         amount = serializer.validated_data["amount"]
         currency = serializer.validated_data["currency"]
+        phone_number = serializer.validated_data["phone_number"]
+        method = serializer.validated_data["method"]
 
         wallet = get_or_create_wallet(request.user)
 
@@ -123,13 +125,7 @@ class CashInView(APIView):
                 {
                     "success": True,
                     "message": "Existing payment found.",
-                    "data": {
-                        "reference": payment.internal_reference,
-                        "gateway_url": payment.checkout_url,
-                        "amount": payment.amount,
-                        "currency": payment.currency,
-                        "status": payment.status,
-                    },
+                    "data": payment,
                 },
                 status=status.HTTP_200_OK,
             )
@@ -137,47 +133,22 @@ class CashInView(APIView):
         # Create payment
         with transaction.atomic():
 
-            internal_reference = (
-                f"BOLO-{uuid.uuid4().hex[:12].upper()}"
-            )
-
-            #
-            # TODO:
-            # Replace this with your payment provider call.
-            #
-            gateway_url = (
-                f"{_frontend_url()}"
-                f"/payment/gateway"
-                f"?ref={internal_reference}"
-            )
-
-            payment = Payment.objects.create(
-                user=request.user,
-                wallet=wallet,
-                provider=Payment.Provider.FAPSHI,
-                direction=Payment.Direction.CASH_IN,
+            payment = initiate_cash_in(
+                user=request.user, 
+                wallet=wallet, 
                 amount=amount,
                 currency=currency,
+                medium=method,
+                phone_number=phone_number,
                 idempotency_key=idempotency_key,
-                internal_reference=internal_reference,
-                checkout_url=gateway_url,
-                status=Payment.Status.PENDING,
-            )
+                )
 
         return Response(
             {
                 "success": True,
                 "message": "Payment initiated successfully.",
-                "data": {
-                    "reference": payment.internal_reference,
-                    "gateway_url": payment.checkout_url,
-                    "amount": payment.amount,
-                    "currency": payment.currency,
-                    "status": payment.status,
-                },
+                "data": payment,
             },
-
-            
             status=status.HTTP_201_CREATED,
         )
     
@@ -186,7 +157,7 @@ class CashOutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        idempotency_key = request.headers.get("Idempotency-Key")
+        idempotency_key = get_idempotency_key(request=request)
 
         wallet = get_or_create_wallet(request.user)
 
@@ -201,9 +172,16 @@ class CashOutView(APIView):
 
         serializer.is_valid(raise_exception=True)
 
+        phone_number = serializer.validated_data["phone_number"]
+        method = serializer.validated_data["method"]
+        amount = serializer.validated_data["amount"]
+
         payment = initiate_cash_out(
             user=request.user,
             wallet=wallet,
+            method=method,
+            recipient_reference=phone_number,
+            amount=amount,
             idempotency_key=idempotency_key,
             **serializer.validated_data,
         )
