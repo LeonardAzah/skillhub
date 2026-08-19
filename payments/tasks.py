@@ -30,7 +30,6 @@ def on_appointment_created(self, appointment_id: str, seeker_user_id: str,
     """
     from decimal import Decimal
     from .services import hold_escrow
-    from .constants import _make_idempotency_key
     idempotency_key = f"escrow_hold:{appointment_id}"
     try:
         hold_escrow(

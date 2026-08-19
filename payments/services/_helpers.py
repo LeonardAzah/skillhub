@@ -11,10 +11,6 @@ def get_wallet(user_id: str) -> Wallet:
     return Wallet.objects.select_for_update().get(user_id=user_id)
 
 
-def make_idempotency_key(*parts) -> str:
-    return ":".join(str(p) for p in parts)
-
-
 def check_idempotency(key: str) -> Transaction | None:
     return Transaction.objects.filter(idempotency_key=key, status=Transaction.Status.COMPLETED).first()
 
