@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'payments',
     'appointments',
     'disputes',
+    'reviews',
 ]
 
 MIDDLEWARE = [
@@ -99,7 +100,7 @@ DATABASES = {
 # Redis
 
 CACHE_REDIS_URL = config("CACHE_REDIS_URL", default='redis://localhost:6379/0')
-ORDERS_REDIS_URL = config("ORDERS_REDIS_URL", default='redis://localhost:6379/0')
+ORDERS_REDIS_URL = config("ORDERS_REDIS_URL", default='redis://localhost:6379/1')
 CACHES ={
      "default": {
         "BACKEND": "django_redis.cache.RedisCache",

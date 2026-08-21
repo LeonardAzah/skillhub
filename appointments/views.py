@@ -506,8 +506,32 @@ class DisputeAppointmentView(APIView):
 
         serializer = DisputeAppointmentSerializer(data=request.data, context={"appointment": apt})
         serializer.is_valid(raise_exception=True)
+        seeker_statement = serializer.validated_data["seeker_statement"]
 
         apt.transition_to(Appointment.Status.DISPUTED, actor=request.user)
+
+        from disputes.models import Dispute, DisputeAuditLog
+        from disputes.services import write_audit, freeze_escrow_for_dispute
+
+        dispute, _created = Dispute.objects.get_or_create(
+            appointment=apt,
+            defaults={
+                "raised_by": request.user,
+                "seeker_statement": seeker_statement,
+                "status": Dispute.Status.OPEN,
+            },
+        )
+
+        # Freese escrow
+        freeze_escrow_for_dispute(str(apt.id))
+
+        #Write opening audit entry
+        write_audit(
+            dispute=dispute,
+            action=DisputeAuditLog.Action.RAISED,
+            actor=request.user,
+            description=seeker_statement[:200]
+        )
 
         publish_event(EventType.DISPUTE_RAISED, {
             **_appointment_payload(apt),

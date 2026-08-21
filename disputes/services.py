@@ -173,3 +173,25 @@ def resolve_dispute(
         return dispute
 
 
+@db_transaction.atomic
+def freeze_escrow_for_dispute(appointment_id:str) -> None:
+    """
+    Mark the EscrowAccount as DISPUTED so no accidental releaase/refund can happen white the case is open.
+    """
+    try:
+        escrow = EscrowAccount.objects.select_for_update().get(
+            appointment_id =appointment_id
+        )
+        if escrow.status == EscrowAccount.Status.HELD:
+            escrow.status = EscrowAccount.Status.DISPUTED
+            escrow.save(update_fields=["status", "updated_at"])
+            logger.info("Escrow frozon for dispute", extra={
+                "appointment_id": str(appointment_id)
+            })
+    except EscrowAccount.DoesNotExist:
+        logger.warning(
+            "No escrow found to freeze",
+            extra={
+                "appointment_id": str(appointment_id)
+            },
+        )
