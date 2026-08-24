@@ -31,6 +31,7 @@ urlpatterns = [
     path('api/v1/payments', include('payments.urls')),
     path('api/v1/appointments', include('appointments.urls')),
     path('api/v1/disputes', include('disputes.urls')),
+    path('api/v1/reviews', include('reviews.urls')),
 
 
     # OpenAPI schema
