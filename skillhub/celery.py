@@ -22,15 +22,23 @@ app.conf.beat_schedule = {
 
     # Auto-release escrow 48h after COMPLETED status
     "auto-release-escrow": {
-        "task": "apps.accounts.tasks.auto_release_escrow",
+        "task": "appointments.tasks.auto_release_escrow",
         "schedule": crontab(minute="*/5"),
     },
 
     #Expire PENDING appointments not accepted within 24h
      "expire-pending-appointments": {
-        "task": "apps.accounts.tasks.expire_pending_appointments",
+        "task": "appointments.tasks.expire_pending_appointments",
         "schedule": crontab(minute="*/10"),
     },
+
+    # Review reminders at T+3 days
+    "send-review-reminders": {
+        "task": "reviews.tasks.send_review_reminders",
+        "schedule": crontab(hour="*/6"),
+    },
+
+
 
 }
 
