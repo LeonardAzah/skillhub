@@ -5,8 +5,7 @@ Covers: creation, accept/reject, start, completion, confirmation,
 cancellation, expiry, auto-release, and reminders.
 """
 from notifications.models import Notification
-from notifications._helper import _create_notification, _enqueue_push, _enqueue_email, _enqueue_escrow_task
-from payments.tasks import on_appointment_created
+from notifications._helper import _create_notification, _enqueue_push, _enqueue_email
 
 
 def handle_appointment_created(payload: dict, event_id: str = "") -> None:
@@ -24,17 +23,6 @@ def handle_appointment_created(payload: dict, event_id: str = "") -> None:
         "deep_link":      f"/appointments/{payload.get('appointment_id')}",
     }
 
-    # escrow hold
-    _enqueue_escrow_task(
-        "payments.tasks.on_appointment_created",
-        {
-            "appointment_id": payload.get("appointment_id"),
-            "seeker_user_id": payload.get("seeker_id"),
-            "provider_user_id": payload.get("provider_id"),
-            "amount": str(payload.get("quoted_price", "0")),
-        },
-    )
-
     # Notification
     _create_notification(provider_id, notif_type, title, body, data, event_id)
     _enqueue_push(provider_id, title, body, data)
@@ -43,6 +31,8 @@ def handle_appointment_created(payload: dict, event_id: str = "") -> None:
         {**payload, "title": title},
         subject=title,
     )
+
+    from payments.tasks import on_appointment_created
 
     on_appointment_created.apply_async(
         kwargs={
@@ -94,11 +84,6 @@ def handle_appointment_rejected(payload: dict, event_id: str = "") -> None:
         "appointment_id": payload.get("appointment_id"),
         "deep_link":      "/appointments",
     }
-
-    _enqueue_escrow_task(
-        "payments.tasks.on_appointment_rejected_or_expired",
-        {"appointment_id": payload.get("appointment_id")},
-    )
 
     _create_notification(seeker_id, notif_type, title, body, data, event_id)
     _enqueue_push(seeker_id, title, body, data)
@@ -161,14 +146,15 @@ def handle_appointment_confirmed(payload: dict, event_id: str = "") -> None:
         "deep_link":      "/wallet",
     }
 
-    -_enqueue_escrow_task(
-        "payments.tasks.on_appointment_confirmed",
-        {"appointment_id": payload.get("appointment_id")},
-    )
-
     _create_notification(provider_id, notif_type, title, body, data, event_id)
     _enqueue_push(provider_id, title, body, data)
     _enqueue_email(provider_id, "email/job_confirmed.html", {**payload, "title": title}, subject=title)
+
+    from payments.tasks import on_appointment_confirmed
+    on_appointment_confirmed.apply_async(
+        kwargs={"appointment_id": payload["appointment_id"]},
+        queue="payments",
+    )
 
 
 def handle_appointment_cancelled(payload: dict, event_id: str = "") -> None:
@@ -183,16 +169,6 @@ def handle_appointment_cancelled(payload: dict, event_id: str = "") -> None:
         "appointment_id": payload.get("appointment_id"),
         "deep_link":      "/appointments",
     }
-
-
-    _enqueue_escrow_task(
-         "payments.tasks.on_appointment_cancelled",
-        {
-            "appointment_id": payload.get("appointment_id"),
-            "cancelled_by":   payload.get("cancelled_by", ""),
-            "quoted_price":   str(payload.get("quoted_price", "0")),
-        },
-    )
 
     for uid in filter(None, [seeker_id, provider_id]):
         _create_notification(uid, notif_type, title, body, data, event_id + f"_{uid}")
@@ -218,11 +194,6 @@ def handle_appointment_expired(payload: dict, event_id: str = "") -> None:
     title      = "Booking expired — refund issued"
     body       = "The provider did not respond within 24 hours. Your payment has been refunded."
     data       = {"type": "booking_expired", "appointment_id": payload.get("appointment_id"), "deep_link": "/appointments"}
-
-    _enqueue_escrow_task(
-        "payments.tasks.on_appointment_rejected_or_expired",
-        {"appointment_id": payload.get("appointment_id")},
-    )
 
     _create_notification(seeker_id, notif_type, title, body, data, event_id)
     _enqueue_push(seeker_id, title, body, data)
@@ -251,11 +222,6 @@ def handle_appointment_auto_released(payload: dict, event_id: str = "") -> None:
     provider_title  = "Payment released to your wallet ✓"
     provider_body   = "As no dispute was raised within 48 hours, your payment has been released."
     data = {"type": "escrow_auto_released", "appointment_id": payload.get("appointment_id"), "deep_link": "/wallet"}
-
-    _enqueue_escrow_task(
-        "payments.tasks.on_appointment_auto_released",
-        {"appointment_id": payload.get("appointment_id")},
-    )
 
     if seeker_id:
         _create_notification(seeker_id, notif_type, seeker_title, seeker_body, data, event_id + "_seeker")

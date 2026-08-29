@@ -172,32 +172,32 @@ class EditReviewSerializer(serializers.Serializer):
 
         return review
 
-    class ProviderReviewSummarySerializer(serializers.ModelSerializer):
-        top_rated = serializers.SerializerMethodField()
-        public_rating_visible = serializers.SerializerMethodField()
+class ProviderReviewSummarySerializer(serializers.ModelSerializer):
+    top_rated = serializers.SerializerMethodField()
+    public_rating_visible = serializers.SerializerMethodField()
 
-        class Meta:
-            model = ProviderReviewSummary,
-            fields = [
-            "total_reviews",
-            "avg_communication",
-            "avg_punctuality",
-            "avg_quality",
-            "avg_overall",
-            "star_distribution",
-            "top_rated",
-            "public_rating_visible",
-            "last_updated",
-            ]
-            read_only_fields = fields
+    class Meta:
+        model = ProviderReviewSummary,
+        fields = [
+        "total_reviews",
+        "avg_communication",
+        "avg_punctuality",
+        "avg_quality",
+        "avg_overall",
+        "star_distribution",
+        "top_rated",
+        "public_rating_visible",
+        "last_updated",
+        ]
+        read_only_fields = fields
 
-        def get_tio_rated(Self, obj) -> bool:
-            return (
-                obj.total_review >= TOP_RATED_MIN_REVIEWS and obj.avg_overall >= TOP_RATED_MIN_AVERAGE
-            )
+    def get_tio_rated(Self, obj) -> bool:
+        return (
+            obj.total_review >= TOP_RATED_MIN_REVIEWS and obj.avg_overall >= TOP_RATED_MIN_AVERAGE
+        )
 
-        def get_public_rating_visible(self, obj) -> bool:
-            return obj.total_reviews >= PUBLIC_RATING_MIN
+    def get_public_rating_visible(self, obj) -> bool:
+        return obj.total_reviews >= PUBLIC_RATING_MIN
 
 class ProviderResponseSerializer(serializers.Serializer):
     response_text = serializers.CharField(max_length=500)

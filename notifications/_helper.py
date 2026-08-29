@@ -84,14 +84,3 @@ def _notify_admins(title: str, body: str, data: dict, event_id: str = "") -> Non
         _create_notification(str(admin.id), Notification.NotificationType.SYSTEM, title, body, data, event_id + f"_{admin.id}")
         _enqueue_email(str(admin.id), "email/admin_alert.html", {"title": title, "body": body, **data}, subject=title)
 
-
-def _enqueue_escrow_task(task_name: str, kwargs: dict) -> None:
-    """Enqueue a payment escrow Celery task onto the 'payment' queue. """
-    try:
-        from celery import current_app
-        current_app.send_task()
-    except Exception as exc:
-        logger.error(
-            "Failed to enqueue esrow task",
-            extra={"task": task_name, "error": str(exc)}
-        )
