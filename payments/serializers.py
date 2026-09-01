@@ -154,25 +154,6 @@ class WalletSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-# class CashInInitiateSerializer(serializers.Serializer):
-#     """
-#     Initiate a wallet top-up. Returns a gateway URL to redirect the user.
-#     """
-#     amount   = serializers.DecimalField(max_digits=15, decimal_places=2)
-#     currency = serializers.CharField(default="XAF", max_length=3)
-#     phone_number = serializers.CharField()
-#     method = serializers.CharField()
-
-#     def validate_phone_number(self, value):
-#             if value and not re.match(r"^6\d{8}$", value):
-#                 raise serializers.ValidationError("Phone must be exactly 9 digits and start with 6, e.g. 612345678")
-#             return value
-
-#     def validate_amount(self, value):
-#         if value <= Decimal("500"):
-#             raise serializers.ValidationError("Amount must be greater than 500 XAF.")
-#         return value
-
 class CashInInitiateSerializer(serializers.Serializer):
     
     amount = serializers.DecimalField(
@@ -316,6 +297,7 @@ class CashOutSerializer(serializers.Serializer):
 
     provider = serializers.ChoiceField(
         choices=Payment.Provider.choices,
+        required=False,
     )
 
     method = serializers.ChoiceField(

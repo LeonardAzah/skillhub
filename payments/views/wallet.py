@@ -99,8 +99,8 @@ class CashInView(APIView):
 
     def post(self, request):
         idempotency_key = get_idempotency_key(request)        
-
-        serializer = CashInInitiateSerializer(data=request.data)
+        wallet = get_or_create_wallet(request.user)
+        serializer = CashInInitiateSerializer(data=request.data, context={"wallet":wallet})
         serializer.is_valid(raise_exception=True)
 
         amount = serializer.validated_data["amount"]
@@ -108,7 +108,7 @@ class CashInView(APIView):
         phone_number = serializer.validated_data["phone_number"]
         method = serializer.validated_data["method"]
 
-        wallet = get_or_create_wallet(request.user)
+        
 
         # Idempotency check
         payment = (
@@ -125,7 +125,7 @@ class CashInView(APIView):
                 {
                     "success": True,
                     "message": "Existing payment found.",
-                    "data": payment,
+                    "data": PaymentSerializer(payment).data,
                 },
                 status=status.HTTP_200_OK,
             )
@@ -147,7 +147,7 @@ class CashInView(APIView):
             {
                 "success": True,
                 "message": "Payment initiated successfully.",
-                "data": payment,
+                "data": PaymentSerializer(payment).data,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -190,16 +190,11 @@ class CashOutView(APIView):
             {
                 "success": True,
                 "message": "Cash-out initiated successfully.",
-                "data": {
-                    "payment_id": str(payment.id),
-                    "reference": payment.internal_reference,
-                    "amount": str(payment.amount),
-                    "currency": payment.currency,
-                    "status": payment.status,
-                },
+                "data": PaymentSerializer(payment).data,
             },
             status=status.HTTP_201_CREATED,
         )
+    
 
 
 class TransactionListView(CachedListMixin, ListAPIView):

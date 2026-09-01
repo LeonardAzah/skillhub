@@ -14,8 +14,8 @@ class FapshiClient:
         self.base_url = _setting("FAPSHI_BASE_URL", default="")
 
         self.headers = {
-            "apiuser": _setting("FAPSHI_APIUSER", default=""),
-            "apikey": _setting.FAPSHI_APIKEY,
+            "apiuser": _setting("FAPSHI_API_USER", default=""),
+            "apikey": _setting("FAPSHI_API_KEY", default=""),
             "Content-Type": "application/json",
         }
 

@@ -166,7 +166,7 @@ class Wallet(models.Model):
     def total_balance(self) -> Decimal:
         """Available + escrowed funds."""
         return self.balance + self.escrow_balance
-
+    @property
     def available_balance(self) -> Decimal:
         return self.balance - self.reserved_balance
 

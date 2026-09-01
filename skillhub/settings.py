@@ -308,6 +308,6 @@ SPECTACULAR_SETTINGS = {
 
 #Fapshi
 
-FAPSHI_BASE_URL= config("FAPSHI_BASE_URL", default="https://live.fapshi.com")
-FAPSHI_APIUSER=config("FAPSHI_API_USER", default='')
-FAPSHI_APIKEY=config("FAPSHI_API_KEY",default="" )
+FAPSHI_BASE_URL= config("FAPSHI_BASE_URL", default="https://sandbox.fapshi.com/")
+FAPSHI_API_USER=config("FAPSHI_API_USER", default='')
+FAPSHI_API_KEY=config("FAPSHI_API_KEY",default="" )

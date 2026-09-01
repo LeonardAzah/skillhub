@@ -58,7 +58,7 @@ def initiate_cash_in(
         amount=int(amount),
         phone=payment.phone_number,
         email=user.email,
-        medium=payment.method,
+        method=payment.method,
         user_id=str(user.id),
         external_id=str(payment.id),
         message=f"Wallet top-up {payment.internal_reference}",
