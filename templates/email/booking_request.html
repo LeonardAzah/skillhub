@@ -1,0 +1,67 @@
+{% extends "email/base.html" %} {% block content %}
+
+<div class="hero">
+  <div class="icon">📅</div>
+  <h1>{{ title }}</h1>
+  <p class="sub">You have received a new booking request.</p>
+</div>
+
+<div class="body">
+  <p>Hi {{ provider_name|default:"there" }},</p>
+
+  <p>
+    <strong>{{ customer_name|default:"A customer" }}</strong> has sent you a
+    booking request for <strong>{{ category|default:"a service" }}</strong>.
+    Please review the request and choose whether to accept or decline it.
+  </p>
+
+  <div class="info-box">
+    ```
+    <div class="row">
+      <span class="lbl">Customer</span>
+      <span class="val">{{ customer_name|default:"—" }}</span>
+    </div>
+
+    <div class="row">
+      <span class="lbl">Service</span>
+      <span class="val">{{ category|default:"—" }}</span>
+    </div>
+
+    <div class="row">
+      <span class="lbl">Date</span>
+      <span class="val">{{ scheduled_date|default:"—" }}</span>
+    </div>
+
+    <div class="row">
+      <span class="lbl">Time</span>
+      <span class="val">{{ scheduled_time|default:"—" }}</span>
+    </div>
+
+    <div class="row">
+      <span class="lbl">Location</span>
+      <span class="val">{{ location_address|default:"—" }}</span>
+    </div>
+
+    <div class="row">
+      <span class="lbl">Amount</span>
+      <span class="val">{{ quoted_price|default:"0" }} XAF</span>
+    </div>
+    ```
+  </div>
+
+  <p>
+    Please review the booking details and respond to the request as soon as
+    possible. The customer will be notified once you make your decision.
+  </p>
+
+  <div class="btn-wrap">
+    <a
+      href="{{ frontend_url|default:'#' }}/appointments/{{ appointment_id }}"
+      class="btn"
+    >
+      Review booking request
+    </a>
+  </div>
+</div>
+
+{% endblock %}

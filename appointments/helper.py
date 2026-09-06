@@ -12,12 +12,12 @@ def _wallet_pin_token_key(seeker_id) -> str:
 def _appointment_payload(appointment: Appointment) -> dict:
     return {
         "appointment_id": str(appointment.id),
-        "provider_id": str(appointment.provider.id),
+        "provider_id": str(appointment.provider.user.id),
         "seeker_id": str(appointment.customer.id),
         "category": appointment.category.title,
         "category_slug": appointment.category.slug,
-        "scheduled_date": str(appointment.scheduled_date),
-        "scheduled_time": str(appointment.scheduled_time),
+        "scheduled_date": str(appointment.scheduled_at),
+        "scheduled_time": str(appointment.scheduled_at),
         "location_address": appointment.location_address,
         "quoted_price": str(appointment.quoted_price),
         "status": appointment.status,
@@ -28,7 +28,6 @@ def _get_appointment_or_404(pk):
         appointment = (
             Appointment.objects.select_related(
                 "provider__user",
-                "provider__user__seeker_profile",
                 "provider__user__provider_profile",
                 "customer__seeker_profile",
                 "customer__provider_profile",

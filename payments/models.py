@@ -338,6 +338,12 @@ class Transaction(models.Model):
         WITHDRAWAL      = "withdrawal",     _("Withdrawal")
         REFUND          = "refund",         _("Refund")
 
+    class LedgerAccount(models.TextChoices):
+        AVAILABLE = "available",            _("Available Balance")
+        ESCROW = "escrow",                  _("Escrow Balance")
+        CLEARING = "clearing",              _("External Clearing")
+
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     wallet = models.ForeignKey(Wallet, on_delete=models.PROTECT, related_name="transactions")
     transaction_type = models.CharField(max_length=20, choices=Type.choices, db_index=True)
@@ -349,6 +355,13 @@ class Transaction(models.Model):
                 null=True, blank=True, db_index=True,
                 help_text=_("Linked appointment UUID if applicable."),
             )
+
+    account= models.CharField(
+        max_length=20,
+        choices=LedgerAccount.choices,
+        default=LedgerAccount.AVAILABLE,
+        db_index=True,
+    )
 
     balance_after = models.DecimalField(
     max_digits=15,
@@ -362,6 +375,12 @@ class Transaction(models.Model):
     on_delete=models.PROTECT,
     related_name="ledger_entries",
 )
+    idempotency_key = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        db_index=True
+    )
     
     description = models.TextField(blank=True, default="")
     metadata = models.JSONField(default=dict, blank=True)
@@ -373,6 +392,20 @@ class Transaction(models.Model):
         indexes = [
             models.Index(fields=["wallet", "transaction_type"]),
             models.Index(fields=["appointment_id"]),
+            models.Index(fields=["idempotency_key"]),
+        ]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["appointment_id", "transaction_type", "account"],
+                condition=~models.Q(appointment_id=None),
+                name="transaction_appointment_leg_unique",
+            ),
+            models.UniqueConstraint(
+                fields=["payment", "transaction_type", "account"],
+                condition=~models.Q(payment=None),
+                name="transaction_payment_leg_unique",
+            ),
         ]
 
     def __str__(self):

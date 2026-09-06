@@ -7,7 +7,7 @@ from appointments.models import Appointment
 from utils.events import EventType
 from notifications.publisher import publish_event
 
-from ._helpers import calculate_fee, check_idempotency, get_platform_wallet, get_wallet
+from ._helpers import calculate_fee, find_existing, get_platform_wallet, get_wallet
 from ..constants import PLATFORM_COMMISSION_RATE
 from ..models import EscrowAccount, Transaction, Wallet
 
@@ -20,7 +20,12 @@ def hold_escrow(appointment_id: str, seeker_user_id: str, provider_user_id: str,
     Creates an EscrowAccount and a ESCROW_HOLD Transaction.
     Also stamps appointment.escrow_transaction_id.
     """
-    existing = check_idempotency(idempotency_key)
+    existing = find_existing(
+        appointment_id,
+        Transaction.Type.ESCROW_HOLD,
+        Transaction.LedgerAccount.AVAILABLE,
+    )
+
     if existing:
         escrow = EscrowAccount.objects.get(appointment_id=appointment_id)
         return escrow
@@ -41,14 +46,26 @@ def hold_escrow(appointment_id: str, seeker_user_id: str, provider_user_id: str,
     seeker_wallet.total_spent    += amount
     seeker_wallet.save(update_fields=["balance", "escrow_balance", "total_spent", "updated_at"])
 
-    txn = Transaction.objects.create(
-        wallet           = seeker_wallet,
-        transaction_type = Transaction.Type.ESCROW_HOLD,
-        amount           = -amount,       # debit from available
-        status           = Transaction.Status.COMPLETED,
-        idempotency_key  = idempotency_key,
-        appointment_id   = appointment_id,
-        description      = f"Escrow hold for appointment {appointment_id}",
+    hold_debit = Transaction.objects.create(
+        wallet=seeker_wallet,
+        transaction_type=Transaction.Type.ESCROW_HOLD,
+        account=Transaction.LedgerAccount.AVAILABLE,
+        amount=-amount,                     
+        balance_after=seeker_wallet.balance,
+        appointment_id=appointment_id,
+        idempotency_key=idempotency_key,
+        description=f"Escrow hold for appointment {appointment_id}",
+    )
+
+    Transaction.objects.create(
+        wallet=seeker_wallet,
+        transaction_type=Transaction.Type.ESCROW_HOLD,
+        account=Transaction.LedgerAccount.ESCROW,
+        amount=amount,                       
+        balance_after=seeker_wallet.escrow_balance,
+        idempotency_key=idempotency_key,
+        appointment_id=appointment_id,
+        description=f"Escrow hold for appointment {appointment_id}",
     )
 
     escrow = EscrowAccount.objects.create(
@@ -58,12 +75,12 @@ def hold_escrow(appointment_id: str, seeker_user_id: str, provider_user_id: str,
         amount          = amount,
         platform_fee    = calculate_fee(amount),
         status          = EscrowAccount.Status.HELD,
-        hold_transaction= txn,
+        hold_transaction= hold_debit,
     )
 
     # Stamp the appointment with the escrow transaction ID
     Appointment.objects.filter(id=appointment_id).update(
-        escrow_transaction_id=txn.id
+        escrow_transaction_id=hold_debit.id
     )
 
     publish_event(EventType.ESCROW_HELD, {
@@ -71,7 +88,7 @@ def hold_escrow(appointment_id: str, seeker_user_id: str, provider_user_id: str,
         "seeker_id":      str(seeker_user_id),
         "provider_id":    str(provider_user_id),
         "amount":         str(amount),
-        "transaction_id": str(txn.id),
+        "transaction_id": str(hold_debit.id),
     })
     return escrow
 
@@ -82,7 +99,11 @@ def release_escrow(appointment_id: str, idempotency_key: str) -> Transaction:
     Release escrow to provider after CONFIRMED or AUTO_RELEASED.
     Deducts platform fee; credits provider wallet.
     """
-    existing = check_idempotency(idempotency_key)
+    existing = find_existing(
+        appointment_id,
+        Transaction.Type.ESCROW_RELEASE,
+        Transaction.LedgerAccount.AVAILABLE,
+    )
     if existing:
         return existing
 
@@ -103,6 +124,17 @@ def release_escrow(appointment_id: str, idempotency_key: str) -> Transaction:
     seeker_wallet.escrow_balance -= escrow.amount
     seeker_wallet.save(update_fields=["escrow_balance", "updated_at"])
 
+    Transaction.objects.create(
+        wallet=seeker_wallet,
+        transaction_type=Transaction.Type.ESCROW_RELEASE,
+        account=Transaction.LedgerAccount.ESCROW,
+        amount=-escrow.amount,
+        balance_after=seeker_wallet.escrow_balance,
+        idempotency_key=idempotency_key,          # anchor leg
+        appointment_id=appointment_id,
+        description=f"Escrow released for appointment {appointment_id}",
+    )
+
     # Credit provider
     provider_wallet.balance      += net_amount
     provider_wallet.total_earned += net_amount
@@ -110,10 +142,11 @@ def release_escrow(appointment_id: str, idempotency_key: str) -> Transaction:
 
     # Release transaction
     release_txn = Transaction.objects.create(
-        wallet           = provider_wallet,
-        transaction_type = Transaction.Type.ESCROW_RELEASE,
-        amount           = net_amount,
-        status           = Transaction.Status.COMPLETED,
+        wallet=provider_wallet,
+        transaction_type=Transaction.Type.ESCROW_RELEASE,
+        account=Transaction.LedgerAccount.AVAILABLE,
+        amount=net_amount,
+        balance_after=provider_wallet.balance,
         idempotency_key  = idempotency_key,
         appointment_id   = appointment_id,
         description      = f"Escrow release for appointment {appointment_id}",
@@ -126,13 +159,17 @@ def release_escrow(appointment_id: str, idempotency_key: str) -> Transaction:
         platform_wallet.total_earned += escrow.platform_fee
         platform_wallet.save(update_fields=["balance", "total_earned", "updated_at"])
         Transaction.objects.create(
-            wallet           = platform_wallet,
-            transaction_type = Transaction.Type.PLATFORM_FEE,
-            amount           = escrow.platform_fee,
-            status           = Transaction.Status.COMPLETED,
-            idempotency_key  = idempotency_key + ":fee",
-            appointment_id   = appointment_id,
-            description      = f"Platform commission {PLATFORM_COMMISSION_RATE*100:.1f}% for appointment {appointment_id}",
+            wallet=platform_wallet,
+            transaction_type=Transaction.Type.PLATFORM_FEE,
+            account=Transaction.LedgerAccount.AVAILABLE,
+            amount=escrow.platform_fee,
+            balance_after=platform_wallet.balance,
+            idempotency_key=f"{idempotency_key}:fee",
+            appointment_id=appointment_id,
+            description=(
+                f"Platform commission {PLATFORM_COMMISSION_RATE*100:.1f}% "
+                f"for appointment {appointment_id}"
+            ),
         )
 
     escrow.status               = EscrowAccount.Status.RELEASED
@@ -155,7 +192,11 @@ def refund_escrow(appointment_id: str, idempotency_key: str,
     Refund escrow to seeker (REJECTED, EXPIRED, CANCELLED).
     partial_amount allows the split refund (late cancellation).
     """
-    existing = check_idempotency(idempotency_key)
+    existing = find_existing(
+        appointment_id,
+        Transaction.Type.ESCROW_REFUND,
+        Transaction.LedgerAccount.AVAILABLE,
+    )
     if existing:
         return existing
 
@@ -167,6 +208,9 @@ def refund_escrow(appointment_id: str, idempotency_key: str,
     if escrow.status != EscrowAccount.Status.HELD:
         raise ValueError(f"Escrow is in state '{escrow.status}', cannot refund.")
 
+    if partial_amount is not None and not (Decimal("0.00") < partial_amount <= escrow.amount):
+        raise ValueError("partial_amount must be between 0 and the escrowed amount.")
+
     refund_amount = partial_amount if partial_amount is not None else escrow.amount
 
     seeker_wallet = Wallet.objects.select_for_update().get(id=escrow.seeker_wallet_id)
@@ -175,6 +219,28 @@ def refund_escrow(appointment_id: str, idempotency_key: str,
     seeker_wallet.total_spent    = max(Decimal("0.00"), seeker_wallet.total_spent - refund_amount)
     seeker_wallet.save(update_fields=["balance", "escrow_balance", "total_spent", "updated_at"])
 
+    Transaction.objects.create(
+        wallet=seeker_wallet,
+        transaction_type=Transaction.Type.ESCROW_REFUND,
+        account=Transaction.LedgerAccount.ESCROW,
+        amount=-escrow.amount,
+        balance_after=seeker_wallet.escrow_balance,
+        idempotency_key=idempotency_key,      
+        appointment_id=appointment_id,
+        description=f"Escrow closed out for appointment {appointment_id}",
+    )
+
+    refund_txn = Transaction.objects.create(
+        wallet=seeker_wallet,
+        transaction_type=Transaction.Type.ESCROW_REFUND,
+        account=Transaction.LedgerAccount.AVAILABLE,
+        amount=refund_amount,
+        balance_after=seeker_wallet.balance,
+        idempotency_key=f"{idempotency_key}:seeker",
+        appointment_id=appointment_id,
+        description=f"Escrow refund for appointment {appointment_id}",
+    )
+
     # If partial refund, release remainder to provider
     if partial_amount and partial_amount < escrow.amount:
         provider_amount = escrow.amount - partial_amount
@@ -182,12 +248,13 @@ def refund_escrow(appointment_id: str, idempotency_key: str,
         provider_wallet.balance      += provider_amount
         provider_wallet.total_earned += provider_amount
         provider_wallet.save(update_fields=["balance", "total_earned", "updated_at"])
+
         Transaction.objects.create(
-            wallet           = provider_wallet,
-            transaction_type = Transaction.Type.ESCROW_RELEASE,
-            amount           = provider_amount,
-            balance_after = provider_wallet.balance,
-            status           = Transaction.Status.COMPLETED,
+            wallet=provider_wallet,
+            transaction_type=Transaction.Type.ESCROW_RELEASE,
+            account=Transaction.LedgerAccount.AVAILABLE,
+            amount=provider_amount,
+            balance_after=provider_wallet.balance,
             idempotency_key  = idempotency_key + ":partial_provider",
             appointment_id   = appointment_id,
             description      = "Partial cancellation compensation for provider",
@@ -196,17 +263,6 @@ def refund_escrow(appointment_id: str, idempotency_key: str,
         seeker_wallet_locked = Wallet.objects.select_for_update().get(id=escrow.seeker_wallet_id)
         seeker_wallet_locked.escrow_balance -= remaining
         seeker_wallet_locked.save(update_fields=["escrow_balance", "updated_at"])
-
-    refund_txn = Transaction.objects.create(
-        wallet           = seeker_wallet,
-        transaction_type = Transaction.Type.ESCROW_REFUND,
-        amount           = refund_amount,
-        balance_after = seeker_wallet.balance,
-        status           = Transaction.Status.COMPLETED,
-        idempotency_key  = idempotency_key,
-        appointment_id   = appointment_id,
-        description      = f"Escrow refund for appointment {appointment_id}",
-    )
 
     escrow.status               = EscrowAccount.Status.REFUNDED
     escrow.release_transaction  = refund_txn

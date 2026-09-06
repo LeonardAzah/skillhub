@@ -368,8 +368,6 @@ class CashOutSerializer(serializers.Serializer):
                 }
             )
 
-    
-
         user = request.user
 
 

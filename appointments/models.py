@@ -17,7 +17,6 @@ from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-
 class ProviderAvailability(models.Model):
     """
     Time slots that a provider has explicitly blocked (holiday, personal time).
@@ -52,6 +51,7 @@ class Appointment(models.Model):
     """
 
     class Status(models.TextChoices):
+        PENDING_PIN    = "pending_pin",     _("pending_pin")     # created, awaiting seeker PIN confirmation
         PENDING        = "pending",        _("Pending")          # awaiting provider acceptance
         ACCEPTED       = "accepted",       _("Accepted")         # provider confirmed
         REJECTED       = "rejected",       _("Rejected")         # provider declined
@@ -65,6 +65,7 @@ class Appointment(models.Model):
 
     # allowed state transitions
     ALLOWED_TRANSITIONS: dict[str, list[str]] = {
+        Status.PENDING_PIN:   [Status.PENDING, Status.CANCELLED],
         Status.PENDING:       [Status.ACCEPTED, Status.REJECTED, Status.CANCELLED, Status.EXPIRED],
         Status.ACCEPTED:      [Status.IN_PROGRESS, Status.CANCELLED],
         Status.IN_PROGRESS:   [Status.COMPLETED],
@@ -126,7 +127,7 @@ class Appointment(models.Model):
     status = models.CharField(
         max_length=15,
         choices=Status.choices,
-        default=Status.PENDING,
+        default=Status.PENDING_PIN,
         db_index=True,
     )
     cancellation_reason = models.TextField(blank=True, default="")
@@ -229,7 +230,7 @@ class Appointment(models.Model):
         if provider and provider.full_name:
             return provider.full_name
 
-        return self.username
+        return self.customer.username
 
     def __str__(self):
         return (

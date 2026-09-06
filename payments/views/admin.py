@@ -1,15 +1,3 @@
-"""
-BoloConnect — apps/payments/views/admin.py
-SRS §15 — Admin payment APIs
-
-Endpoints
-─────────
-GET    /api/v1/admin/wallet/ledger/
-POST   /api/v1/admin/wallet/{user_id}/freeze/
-GET    /api/v1/admin/withdrawals/
-POST   /api/v1/admin/withdrawals/{id}/approve/
-POST   /api/v1/admin/withdrawals/{id}/reject/
-"""
 from django.db.models import Count, Q, Sum
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated

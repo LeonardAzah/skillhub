@@ -12,12 +12,24 @@ from .views import (
     ConfirmAppointmentView,
     CancelAppointmentView,
     DisputeAppointmentView,
+    ConfirmBookingPinView,
+    ProviderAppointmentListView,
 )
 
 urlpatterns = [
     path(
         "", 
         AppointmentListCreateView.as_view(),name="appointment-create"
+    ),
+    path(
+        "/<uuid:pk>/confirm-pin",
+        ConfirmBookingPinView.as_view(),
+        name="appointment-confirm-pin",
+    ),
+    path(
+        "/provider",
+        ProviderAppointmentListView.as_view(),
+        name="provider-appointments",
     ),
     path(
         "/<uuid:pk>/accept", 

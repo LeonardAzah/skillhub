@@ -10,7 +10,7 @@ is absent or expired.  On successful booking the token is consumed (deleted)
 so the PIN must be re-entered for the next booking.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from django.utils import timezone
 from rest_framework import serializers
@@ -20,7 +20,7 @@ from .models import Appointment, AppointmentStatusLog, ProviderAvailability
 from .helper import _wallet_pin_token_key
 
 from accounts.models import ProviderProfile, User
-from categories.models import Category, ProviderCategory
+from categories.models import Category
 from utils.exceptions import error_response
 
 
@@ -43,163 +43,243 @@ class AppointmentStatusLogSerializer(serializers.ModelSerializer):
 
 class CreateAppointmentSerializer(serializers.Serializer):
     """
-    Booking workflow.
-
-    Wallet PIN gate
-    ───────────────
-    The seeker must have verified their wallet PIN via the payments module
-    within the last 5 minutes.  That module stores the token:
-
-        wallet_pin_verified:{seeker_id}   (Redis, TTL = 5 min)
-
-    If the token is absent this serializer raises a 400 directing the seeker
-    to verify their PIN first.  The token is consumed on successful booking.
-
-    Other validations:
+    Validations:
       - Provider exists and is KYC-verified
       - Provider offers the requested category
       - Date is today or in the future
       - Time slot is not already blocked or booked
-      - quoted_price > 0
+      - quoted_price > 1000
     """
 
     provider_id = serializers.UUIDField()
     category_slug = serializers.SlugField()
+
     location_address = serializers.CharField(max_length=500)
-    location_lat = serializers.DecimalField(max_digits=24, decimal_places=16, required=False
+
+    location_lat = serializers.DecimalField(
+        max_digits=24,
+        decimal_places=16,
+        required=False,
     )
+
     location_lng = serializers.DecimalField(
-        max_digits=24, decimal_places=16, required=False
+        max_digits=24,
+        decimal_places=16,
+        required=False,
     )
+
     scheduled_at = serializers.DateTimeField()
+
     notes = serializers.CharField(
-        max_length=2000, required=False, allow_blank=True, default=""
+        max_length=2000,
+        required=False,
+        allow_blank=True,
+        default="",
     )
-    quoted_price = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+    quoted_price = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+    )
 
     def validate_scheduled_at(self, value):
-        if value < datetime.now():
-            raise serializers.ValidationError("Scheduled date/time must be today or the future.")
+        if value < timezone.now():
+            raise serializers.ValidationError(
+                "Scheduled date/time must be today or the future."
+            )
+
+        return value
 
     def validate_quoted_price(self, value):
         if value <= 1000:
-            raise serializers.ValidationError("Quoted price must be greater than 1000.")
+            raise serializers.ValidationError(
+                "Quoted price must be greater than 1000."
+            )
+
         return value
 
     def validate(self, attrs):
         request = self.context["request"]
-        seeker: User= request.user
+        seeker: User = request.user
 
-        # wallet PIN must have been verified
-        from django.core.cache import cache
-        if not cache.get(_wallet_pin_token_key(seeker.id)):
-            raise serializers.ValidationError("Please verify your wallet pin before booking")
-
-        if seeker.id == provider.user_id:
-            raise serializers.ValidationError(
-                {"provider_id": "You cannot book an appointment with yourself."}
-            )
-
-        # validate provider
         try:
-            provider = ProviderProfile.objects.select_related("user").get(
-                id=attrs["provider_id"]
+            provider = (
+                ProviderProfile.objects
+                .select_related("user")
+                .get(id=attrs["provider_id"])
             )
         except ProviderProfile.DoesNotExist:
-            raise serializers.ValidationError({
-                "provider_id":"Provider not found"
-            })
+            raise serializers.ValidationError(
+                {
+                    "provider_id": "Provider not found."
+                }
+            )
+
+        # Check that seeker is not booking themselves
+        if seeker.id == provider.user_id:
+            raise serializers.ValidationError(
+                {
+                    "provider_id": "You cannot book an appointment with yourself."
+                }
+            )
 
         if not provider.is_verified:
             raise serializers.ValidationError(
                 {
-                    "provider_id":"This provider has not verified"
+                    "provider_id": "This provider has not been verified."
                 }
             )
 
         if not provider.user.is_active:
             raise serializers.ValidationError(
                 {
-                    "provider_id":"This provider account is not active."
+                    "provider_id": "This provider account is not active."
                 }
             )
 
-        # category
         try:
-            category = Category.objects.active().get(
-                slug=attrs["category_slug"]
+            category = (
+                Category.objects
+                .active()
+                .get(slug=attrs["category_slug"])
             )
         except Category.DoesNotExist:
             raise serializers.ValidationError(
                 {
-                    "category_slug":"Category not found or is inactive."
-                    
+                    "category_slug": "Category not found or is inactive."
                 }
             )
 
-        if not ProviderCategory.objects.filter(
-            provider=provider, category=category
-        ).exists(): raise serializers.ValidationError(
-            {"category_slug": f"This provider does not offer '{category.title}'."}
-        )
+        from categories.models import ProviderCategory
 
-        # availability
+        if not ProviderCategory.objects.filter(
+            provider=provider,
+            category=category,
+        ).exists():
+            raise serializers.ValidationError(
+                {
+                    "category_slug":
+                        f"This provider does not offer '{category.title}'."
+                }
+            )
+
         scheduled_at = attrs["scheduled_at"]
+
         if ProviderAvailability.objects.filter(
             provider=provider,
             blocked_date=scheduled_at.date(),
             blocked_start__lte=scheduled_at.time(),
             blocked_end__gt=scheduled_at.time(),
-        ).exists(): raise serializers.ValidationError(
-            "Provider is unavailable at the requested date and time."
-        )
+        ).exists():
+            raise serializers.ValidationError(
+                "Provider is unavailable at the requested date and time."
+            )
 
         if Appointment.objects.filter(
             provider=provider,
             scheduled_at=scheduled_at,
-            status__in=[Appointment.Status.PENDING, Appointment.Status.ACCEPTED, Appointment.Status.IN_PROGRESS]
-        ).exists():raise serializers.ValidationError(
-            "Provider already has a booking at this time. Please chose another slot."
-        )
+            status__in=[
+                Appointment.Status.PENDING,
+                Appointment.Status.ACCEPTED,
+                Appointment.Status.IN_PROGRESS,
+            ],
+        ).exists():
+            raise serializers.ValidationError(
+                "Provider already has a booking at this time. "
+                "Please choose another slot."
+            )
 
-        attrs["_provider"]=provider
-        attrs["_category"]=category
-        attrs["_seeker"]= seeker
+        attrs["_provider"] = provider
+        attrs["_category"] = category
+        attrs["_seeker"] = seeker
 
         return attrs
 
     def save(self) -> Appointment:
         attrs = self.validated_data
+
         provider = attrs["_provider"]
-        Category = attrs["_category"]
+        category = attrs["_category"]
         seeker = attrs["_seeker"]
 
         appointment = Appointment.objects.create(
             provider=provider,
             customer=seeker,
-            category=Category,
+            category=category,
             location_address=attrs["location_address"],
             location_lat=attrs.get("location_lat"),
             location_lng=attrs.get("location_lng"),
-            scheduled_at=attrs("scheduled_at"),
+            scheduled_at=attrs["scheduled_at"], 
             notes=attrs.get("notes", ""),
             quoted_price=attrs["quoted_price"],
-            status=Appointment.Status.PENDING,
+            status=Appointment.Status.PENDING_PIN,
         )
 
         AppointmentStatusLog.objects.create(
             appointment=appointment,
             from_status="",
-            to_status=Appointment.Status.PENDING,
-            actor_id=str(seeker.user.id)
+            to_status=Appointment.Status.PENDING_PIN,
+            actor_id=str(seeker.id),
         )
-
-        # Consume the wallet pin token
-        from django.core.cache import cache
-        cache.delete(_wallet_pin_token_key(seeker.id))
 
         return appointment
 
+class ConfirmBookingPinSerializer(serializers.Serializer):
+    """
+    Seeker confirms booking with their wallet PIN
+
+    Verifies the PIN inline. On success the appointment moves from
+    PENDING_PIN → PENDING and is sent to the provider.
+
+    Errors
+    ──────
+    400 — PIN incorrect (with remaining attempts count)
+    400 — Appointment not in PENDING_PIN status
+    400 — Wallet PIN not set (must call POST /wallet/pin/set/ first)
+    423 — PIN locked after too many failures (with locked_until timestamp)
+    """
+
+    pin = serializers.CharField(
+        write_only=True,
+        min_length=4,
+        max_length=4,
+    )
+
+    def validate_pin(self, value:str) -> str:
+        if not value.isdigit:
+            raise serializers.ValidationError("PIN must be exactly 4 digits.")
+        return value
+
+    def validate(self, attrs):
+        request = self.context["request"]
+        appointment: Appointment = self.context["appointment"]
+
+        if appointment.status != Appointment.Status.PENDING_PIN:
+            raise serializers.ValidationError(
+                f"This appointment is in '{appointment.status}' status and does not"
+                f"require PIN confirmation."
+            )
+
+        user = request.user
+        if not hasattr(user, "wallet_pin") or not user.wallet_pin.is_set:
+            raise serializers.ValidationError("You have not set a wallet PIN yet.")
+
+        # verify pin
+        try:
+            ok = user.wallet_pin.verify(attrs["pin"])
+        except ValueError as exc:
+            # WalletPin.verify() raises ValueError when locked
+            raise serializers.ValidationError(str(exc))
+
+        if not ok:
+            from payments.models import WalletPin
+            remaining = max(0, WalletPin.MAX_ATTEMPTS - user.wallet_pin.failed_attempts)
+
+            raise serializers.ValidationError(
+                f"Incorrect PIN. {remaining} attempt(s) remaining before lockout."
+            )
+        
+        return attrs
 
 class AppointmentListSerializer(serializers.ModelSerializer):
     """Lightweight list item."""
@@ -219,7 +299,7 @@ class AppointmentListSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 class AppointmentListSerializer(serializers.ModelSerializer):
-    provider_name = serializers.CharField(source="provider.user.display_name", read_only=True)
+    provider_name = serializers.CharField(source="provider.full_name", read_only=True)
     customer_name = serializers.CharField(source="customer.display_name", read_only=True)
     category_title = serializers.CharField(source="category.title", read_only=True)
 
@@ -308,7 +388,7 @@ class StartAppointmentSerializer(serializers.Serializer):
         return attrs
 
 class CompleteAppointmentSerializer(serializers.Serializer):
-    completion_prof = serializers.URLField(
+    completion_proof = serializers.URLField(
         help_text="S3/cloudinary URL of the completion photo/video."
     )
     completion_notes = serializers.CharField(

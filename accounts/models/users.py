@@ -193,6 +193,16 @@ class User(AbstractBaseUser, PermissionsMixin):
     def has_completed_onboarding(self) -> bool:
         return self.account_type is not None
 
+    @property
+    def display_name(self):
+        if hasattr(self, "seeker_profile"):
+            return self.seeker_profile.full_name
+
+        if hasattr(self, "provider_profile"):
+            return self.provider_profile.full_name
+
+        return self.username
+
 
 
 

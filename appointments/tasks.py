@@ -32,16 +32,24 @@ def expire_pending_appointments(self):
     """
     Any pending appointment not accepted/rejected with 24 hours is moved to 
     expired and a refund is triggered for the escrow funds.
+
+    Also cleans up PENDING_PIN appointments not confirmed within 10 minutes
+    (seeker initiated but never entered their PIN).These have no escrow
+    held so they are simply cancelled — no financial side-effects.
+
     Runs every 10 minutes (see skillhub/celery.py beat schedule)
     """
+    expired_count = 0
+    abandoned_count = 0
 
+    # Expire PENDING (appointments that has not beening accepted nor rejected by provider after 24h)
     cutoff = timezone.now() - timedelta(hours=24)
     expiring_appointments = Appointment.objects.filter(
         status=Appointment.Status.PENDING,
         created_at__lte=cutoff
-    ).select_related("provider__user", "customer__user", "category")
+    ).select_related("provider__user", "customer", "category")
 
-    expired_count = 0
+    
     for appointment in expiring_appointments:
         try:
             appointment.transition_to(Appointment.Status.EXPIRED)
@@ -61,8 +69,30 @@ def expire_pending_appointments(self):
                 "Failed to expire appointment",
                 extra={"appointment_id": str(appointment.id), "error":str(exc)},
             )
-    logger.info("Expired pending appointments", extra={"count": expired_count})
-    return {"status":"ok", "expired": expired_count}
+
+    # Cancle stale PENDING_PIN (seeker never confirmed in 10 min)
+    cutoff_pin = timezone.now() - timedelta(minutes=10)
+    abandoned = Appointment.objects.filter(
+        status = Appointment.Status.PENDING_PIN,
+        created_at__lte=cutoff_pin,
+    ).select_related("provider__user", "customer", "category")
+
+    for apt in abandoned:
+        try:
+            apt.transition_to(
+                Appointment.Status.CANCELLED,
+                reason="booking abandoned - PIN not confirmed within 10 minutes.",
+            )
+            abandoned_count += 1
+        except Exception as exc:
+            logger.error(
+                "Failed to cancel abandoned PENDING_PIN appointment",
+                extra={"appointment_id": str(apt.id), "error": str(exc)}
+            )
+    logger.info("Appointment expiry run complete",
+                 extra={"expired": expired_count, "abandoned_pin": abandoned_count},
+                 )
+    return {"status": "ok", "expired": expired_count, "abandoned_pin": abandoned_count}
 
 
 @shared_task(
@@ -165,4 +195,6 @@ def send_appointment_reminder(self):
         extra={"24h": sent_24h, "2h": sent_2h},
     )
     return {"status": "ok", "sent_24h": sent_24h, "sent_2h": sent_2h}
+
+
 

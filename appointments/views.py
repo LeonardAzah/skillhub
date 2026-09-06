@@ -7,9 +7,9 @@ from rest_framework import status
 from rest_framework.permissions import  IsAuthenticated, BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.generics import ListCreateAPIView, RetrieveAPIView
+from rest_framework.generics import ListCreateAPIView, RetrieveAPIView, ListAPIView
 
-from .models import Appointment, ProviderAvailability
+from .models import Appointment, ProviderAvailability, AppointmentStatusLog
 from .serializers import (
     ProviderAvailabilitySerializer, 
     CreateAppointmentSerializer, 
@@ -22,7 +22,7 @@ from .serializers import (
     ConfirmAppointmentSerializer,
     CancleAppointmentSerializer,
     DisputeAppointmentSerializer,
-
+    ConfirmBookingPinSerializer,
     )
 
 from .helper import _get_appointment_or_404, _appointment_payload
@@ -198,6 +198,15 @@ class ProviderAvailabilityDeleteView(APIView):
 
 
 class AppointmentListCreateView(ListCreateAPIView):
+    """
+    POST /api/v1/appointments
+
+    Creates the appointment with status=PENDING_PIN.
+    The seeker must then confirm with their wallet PIN via:
+        POST /api/v1/appointments/{id}/confirm-pin
+    Only after PIN confirmation does the appointment become PENDING
+    and become visible to the provider.
+    """
     permission_classes = [IsAuthenticated]
 
     def get_serializer_class(self):
@@ -205,28 +214,22 @@ class AppointmentListCreateView(ListCreateAPIView):
 
     def get_permissions(self):
         if self.request.method == "POST":
-            return [IsAuthenticated(), IsVerified()]
+            return [IsAuthenticated()]
         return [IsAuthenticated()]
 
     def get_queryset(self):
         user = self.request.user
         qs = Appointment.objects.select_related(
-            "provider__user",
-            "provider__user__seeker_profile",
-            "provider__user__provider_profile",
+            "provider"
             "customer__seeker_profile",
             "customer__provider_profile",
             "category",
         )
 
-        if user.role == User.Role.SEEKER:
-            qs = qs.filter(customer=user)
-        elif user.role == User.Role.PROVIDER:
-            qs = qs.filter(provider__user=user)
-        elif user.role == User.Role.ADMIN or user.is_staff:
-            pass  # admins see everything
+        if user.is_staff or user.role == User.Role.ADMIN:
+            pass
         else:
-            qs = qs.none()
+            qs = qs.filter(customer=user)
 
         status_filter = self.request.query_params.get("status")
         if status_filter:
@@ -239,20 +242,100 @@ class AppointmentListCreateView(ListCreateAPIView):
         serializer.is_valid(raise_exception=True)
         apt: Appointment = serializer.save()
 
-        publish_event(EventType.APPOINTMENT_CREATED, {
-            **_appointment_payload(apt),
-            "notes": apt.notes,
-        })
-
         output = AppointmentSerializer(apt, context=self.get_serializer_context())
         return Response(
             {
                 "success":True,
-                "message":"Appointment list retrived successfully.",
+                "message":"Appointment created successfully please confirm transaction with your wallet PIN.",
                 "data":output.data,
             },
              status=status.HTTP_201_CREATED
             )
+
+class ProviderAppointmentListView(ListAPIView):
+    """
+    GET /api/v1/appointments/provider
+    Returns appointments assigned to the logged-in provider
+    """
+
+    permission_classes =[IsAuthenticated, IsProvider]
+    serializer_class = AppointmentListSerializer
+    def get_queryset(self):
+        user = self.request.user
+
+        qs = Appointment.objects.select_related(
+            "provider",
+            "customer__seeker_profile",
+            "customer__provider_profile",
+            "category",
+        ).filter(
+            provider=user.provider_profile
+        ).exclude(
+            status=Appointment.Status.PENDING_PIN
+        )
+
+        status_filter = self.request.query_params.get("status")
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        return qs
+
+class ConfirmBookingPinView(APIView):
+    """
+    POST .api/v1/appointments/{id}/confirm-pin
+    Confirm booking with wallet pin
+
+    The seeker enters their 4-digit wallet pin to confirm the booking.
+    On success:
+      - Appointment transitions PENDING_PIN → PENDING
+      - APPOINTMENT_CREATED event published → provider notified + escrow held
+    On failure:
+      - Attempt recorded on WalletPin model
+      - 400 with remaining attempts (or locked message)
+      - Appointment remains in PENDING_PIN
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        apt, err = _get_appointment_or_404(pk)
+        if err:
+            return err
+        if apt.customer != request.user:
+            return error_response(
+                message="Forbidden.",
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = ConfirmBookingPinSerializer(
+            data=request.data,
+            context={"request": request, "appointment": apt},
+        )
+
+        serializer.is_valid(raise_exception=True)
+
+        # Transition PENDING_PIN → PENDING
+        apt.transition_to(Appointment.Status.PENDING, actor=request.user, reason="Seeker confirmed booking with wallet PIN.")
+
+        publish_event(EventType.APPOINTMENT_CREATED, {
+                    **_appointment_payload(apt),
+                    "notes": apt.notes,
+                })
+
+        AppointmentStatusLog.objects.create(
+                    appointment=apt,
+                    from_status="",
+                    to_status=Appointment.Status.PENDING,
+                    actor_id=str(request.user.id),
+                )
+
+        return Response(
+
+            {
+                "success": True,
+                "message": "Appointment created and confirmed successfully.",
+                "data": AppointmentSerializer(apt).data,
+            },
+                status=status.HTTP_200_OK,
+        )
 
 
 class AppointmentDetailView(RetrieveAPIView):
