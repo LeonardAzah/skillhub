@@ -3,4 +3,6 @@ class FapshiError(Exception):
 
 
 class FapshiAPIError(FapshiError):
-    """Fapshi returned an unsuccessful response."""
+    def __init__(self, message, status_code=None):
+        super().__init__(message)
+        self.status_code = status_code

@@ -1,27 +1,15 @@
-"""
-When a seeker initiates a booking they must have previously entered their
-wallet PIN (POST /api/v1/payments/wallet/pin/verify — implemented in the payments
-module).  That endpoint stores a short-lived cache token:
 
-wallet_pin_verified:{seeker_id}   TTL = 5 minutes
-
-The `CreateAppointmentSerializer` reads this token and raises a 400 if it
-is absent or expired.  On successful booking the token is consumed (deleted)
-so the PIN must be re-entered for the next booking.
-"""
-
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta, timezone
 
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework import status
 
 from .models import Appointment, AppointmentStatusLog, ProviderAvailability
-from .helper import _wallet_pin_token_key
 
 from accounts.models import ProviderProfile, User
 from categories.models import Category
-from utils.exceptions import error_response
+from utils.serializers import WalletPinSerializer
 
 
 class ProviderAvailabilitySerializer(serializers.ModelSerializer):
@@ -212,74 +200,96 @@ class CreateAppointmentSerializer(serializers.Serializer):
             scheduled_at=attrs["scheduled_at"], 
             notes=attrs.get("notes", ""),
             quoted_price=attrs["quoted_price"],
-            status=Appointment.Status.PENDING_PIN,
+            status=Appointment.Status.INITIATED,
         )
 
         AppointmentStatusLog.objects.create(
             appointment=appointment,
             from_status="",
-            to_status=Appointment.Status.PENDING_PIN,
+            to_status=Appointment.Status.INITIATED,
             actor_id=str(seeker.id),
         )
 
         return appointment
 
-class ConfirmBookingPinSerializer(serializers.Serializer):
-    """
-    Seeker confirms booking with their wallet PIN
-
-    Verifies the PIN inline. On success the appointment moves from
-    PENDING_PIN → PENDING and is sent to the provider.
-
-    Errors
-    ──────
-    400 — PIN incorrect (with remaining attempts count)
-    400 — Appointment not in PENDING_PIN status
-    400 — Wallet PIN not set (must call POST /wallet/pin/set/ first)
-    423 — PIN locked after too many failures (with locked_until timestamp)
-    """
-
-    pin = serializers.CharField(
-        write_only=True,
-        min_length=4,
-        max_length=4,
-    )
-
-    def validate_pin(self, value:str) -> str:
-        if not value.isdigit:
-            raise serializers.ValidationError("PIN must be exactly 4 digits.")
-        return value
+class ConfirmBookingPinSerializer(WalletPinSerializer):
 
     def validate(self, attrs):
-        request = self.context["request"]
-        appointment: Appointment = self.context["appointment"]
+        appointment = self.context["appointment"]
 
-        if appointment.status != Appointment.Status.PENDING_PIN:
+        if appointment.status != Appointment.Status.INITIATED:
             raise serializers.ValidationError(
-                f"This appointment is in '{appointment.status}' status and does not"
-                f"require PIN confirmation."
+                f"This appointment is in '{appointment.status}' status "
+                "and does not require PIN confirmation."
             )
 
-        user = request.user
-        if not hasattr(user, "wallet_pin") or not user.wallet_pin.is_set:
-            raise serializers.ValidationError("You have not set a wallet PIN yet.")
-
-        # verify pin
         try:
-            ok = user.wallet_pin.verify(attrs["pin"])
-        except ValueError as exc:
-            # WalletPin.verify() raises ValueError when locked
-            raise serializers.ValidationError(str(exc))
-
-        if not ok:
-            from payments.models import WalletPin
-            remaining = max(0, WalletPin.MAX_ATTEMPTS - user.wallet_pin.failed_attempts)
-
-            raise serializers.ValidationError(
-                f"Incorrect PIN. {remaining} attempt(s) remaining before lockout."
+            from payments.services.pin import verify_wallet_pin
+            verify_wallet_pin(
+                self.context["request"].user,
+                attrs["pin"],
             )
-        
+        except ValueError as exc:
+            raise serializers.ValidationError({"pin": str(exc)})
+
         return attrs
+
+# class ConfirmBookingPinSerializer(serializers.Serializer):
+#     """
+#     Seeker confirms booking with their wallet PIN
+
+#     Verifies the PIN inline. On success the appointment moves from
+#     PENDING_PIN → PENDING and is sent to the provider.
+
+#     Errors
+#     ──────
+#     400 — PIN incorrect (with remaining attempts count)
+#     400 — Appointment not in PENDING_PIN status
+#     400 — Wallet PIN not set (must call POST /wallet/pin/set/ first)
+#     423 — PIN locked after too many failures (with locked_until timestamp)
+#     """
+
+#     pin = serializers.CharField(
+#         write_only=True,
+#         min_length=4,
+#         max_length=4,
+#     )
+
+#     def validate_pin(self, value:str) -> str:
+#         if not value.isdigit:
+#             raise serializers.ValidationError("PIN must be exactly 4 digits.")
+#         return value
+
+#     def validate(self, attrs):
+#         request = self.context["request"]
+#         appointment: Appointment = self.context["appointment"]
+
+#         if appointment.status != Appointment.Status.PENDING_PIN:
+#             raise serializers.ValidationError(
+#                 f"This appointment is in '{appointment.status}' status and does not"
+#                 f"require PIN confirmation."
+#             )
+
+#         user = request.user
+#         if not hasattr(user, "wallet_pin") or not user.wallet_pin.is_set:
+#             raise serializers.ValidationError("You have not set a wallet PIN yet.")
+
+#         # verify pin
+#         try:
+#             ok = user.wallet_pin.verify(attrs["pin"])
+#         except ValueError as exc:
+#             # WalletPin.verify() raises ValueError when locked
+#             raise serializers.ValidationError(str(exc))
+
+#         if not ok:
+#             from payments.models import WalletPin
+#             remaining = max(0, WalletPin.MAX_ATTEMPTS - user.wallet_pin.failed_attempts)
+
+#             raise serializers.ValidationError(
+#                 f"Incorrect PIN. {remaining} attempt(s) remaining before lockout."
+#             )
+        
+#         return attrs
 
 class AppointmentListSerializer(serializers.ModelSerializer):
     """Lightweight list item."""

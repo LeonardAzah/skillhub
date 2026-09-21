@@ -2,6 +2,7 @@ from .escrow import hold_escrow, refund_escrow, release_escrow
 from .wallet import create_wallet, process_cashin, process_expired_payment, process_failed_payment, complete_cash_out, release_cashout_reservation, process_cashout_failed, process_cashout_expired
 from .cashout import release_cashout_reservation,initiate_cash_out
 from .cashin import initiate_cash_in
+from .pin import verify_wallet_pin
 
 __all__ = [
     "create_wallet",
@@ -18,4 +19,5 @@ __all__ = [
     "release_cashout_reservation",
     "process_cashout_failed",
     "process_cashout_expired",
+    "verify_wallet_pin",
 ]

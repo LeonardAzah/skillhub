@@ -201,7 +201,7 @@ class AppointmentListCreateView(ListCreateAPIView):
     """
     POST /api/v1/appointments
 
-    Creates the appointment with status=PENDING_PIN.
+    Creates the appointment with status=INITIATED.
     The seeker must then confirm with their wallet PIN via:
         POST /api/v1/appointments/{id}/confirm-pin
     Only after PIN confirmation does the appointment become PENDING
@@ -271,7 +271,7 @@ class ProviderAppointmentListView(ListAPIView):
         ).filter(
             provider=user.provider_profile
         ).exclude(
-            status=Appointment.Status.PENDING_PIN
+            status=Appointment.Status.INITIATED
         )
 
         status_filter = self.request.query_params.get("status")
@@ -281,17 +281,17 @@ class ProviderAppointmentListView(ListAPIView):
 
 class ConfirmBookingPinView(APIView):
     """
-    POST .api/v1/appointments/{id}/confirm-pin
+    POST api/v1/appointments/{id}/confirm-pin
     Confirm booking with wallet pin
 
     The seeker enters their 4-digit wallet pin to confirm the booking.
     On success:
-      - Appointment transitions PENDING_PIN → PENDING
+      - Appointment transitions INITIATED → PENDING
       - APPOINTMENT_CREATED event published → provider notified + escrow held
     On failure:
       - Attempt recorded on WalletPin model
       - 400 with remaining attempts (or locked message)
-      - Appointment remains in PENDING_PIN
+      - Appointment remains in INITIATED
     """
     permission_classes = [IsAuthenticated]
 
@@ -312,7 +312,7 @@ class ConfirmBookingPinView(APIView):
 
         serializer.is_valid(raise_exception=True)
 
-        # Transition PENDING_PIN → PENDING
+        # Transition INITIATED → PENDING
         apt.transition_to(Appointment.Status.PENDING, actor=request.user, reason="Seeker confirmed booking with wallet PIN.")
 
         publish_event(EventType.APPOINTMENT_CREATED, {

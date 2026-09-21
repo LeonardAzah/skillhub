@@ -33,7 +33,7 @@ def expire_pending_appointments(self):
     Any pending appointment not accepted/rejected with 24 hours is moved to 
     expired and a refund is triggered for the escrow funds.
 
-    Also cleans up PENDING_PIN appointments not confirmed within 10 minutes
+    Also cleans up INITIATED appointments not confirmed within 10 minutes
     (seeker initiated but never entered their PIN).These have no escrow
     held so they are simply cancelled — no financial side-effects.
 
@@ -70,10 +70,10 @@ def expire_pending_appointments(self):
                 extra={"appointment_id": str(appointment.id), "error":str(exc)},
             )
 
-    # Cancle stale PENDING_PIN (seeker never confirmed in 10 min)
+    # Cancle stale INITIATED (seeker never confirmed in 10 min)
     cutoff_pin = timezone.now() - timedelta(minutes=10)
     abandoned = Appointment.objects.filter(
-        status = Appointment.Status.PENDING_PIN,
+        status = Appointment.Status.INITIATED,
         created_at__lte=cutoff_pin,
     ).select_related("provider__user", "customer", "category")
 
@@ -86,7 +86,7 @@ def expire_pending_appointments(self):
             abandoned_count += 1
         except Exception as exc:
             logger.error(
-                "Failed to cancel abandoned PENDING_PIN appointment",
+                "Failed to cancel abandoned INITIATED appointment",
                 extra={"appointment_id": str(apt.id), "error": str(exc)}
             )
     logger.info("Appointment expiry run complete",

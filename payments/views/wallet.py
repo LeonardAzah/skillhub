@@ -1,4 +1,3 @@
-
 import uuid
 from django.core.cache import cache
 
@@ -7,16 +6,15 @@ from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
-from rest_framework.exceptions import ValidationError
 from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView
 from django_filters.rest_framework import DjangoFilterBackend
 
 from drf_spectacular.utils import extend_schema
 
-from utils.permissions import IsVerified
+from utils.permissions import IsAdmin, IsVerified
 
-from ..models import EscrowAccount, Transaction, Payment
+from ..models import EscrowAccount, Transaction, Payment, WalletActivity
 from ..serializers import (
     CashInInitiateSerializer,
     EscrowSerializer,
@@ -26,15 +24,19 @@ from ..serializers import (
     TransactionListSerializer,
     PaymentListSerializer,
     PaymentSerializer,
+    WalletActivitySerializer,
+    PinCashoutConfirmationSerializer,
     
 )
-from ..filters import TransactionFilter,PaymentFilter, AmountBracketFilterBackend
+from ..exceptions import (InsufficientFundsError, CashOutProviderError, InvalidPaymentStateError, CashInProviderError)
+from ..filters import TransactionFilter,PaymentFilter, AmountBracketFilterBackend, WalletActivityFilter
 
 from ..services import initiate_cash_out, initiate_cash_in
 
 from ._helpers import get_or_create_wallet
 
-from utils.helpers import get_idempotency_key, _frontend_url
+from utils.helpers import get_idempotency_key
+from utils.exceptions import error_response
 from django.db import transaction
 from ..caching import cache, build_list_cache_key, CACHE_TTL
 
@@ -108,58 +110,74 @@ class CashInView(APIView):
         phone_number = serializer.validated_data["phone_number"]
         method = serializer.validated_data["method"]
 
-        
-
-        # Idempotency check
-        payment = (
-            Payment.objects
-            .filter(
-                user=request.user,
-                idempotency_key=idempotency_key,
+        try:  
+            payment = initiate_cash_in(
+                    user=request.user, 
+                    wallet=wallet, 
+                    amount=amount,
+                    currency=currency,
+                    medium=method,
+                    phone_number=phone_number,
+                    idempotency_key=idempotency_key,
+                )
+        except CashInProviderError as exc:
+            return error_response(
+                message=str(exc),
+                status_code=status.HTTP_502_BAD_GATEWAY,
             )
-            .first()
-        )
 
-        if payment:
+        activity = (
+                payment.wallet_activities
+                .filter(kind=WalletActivity.Kind.CASH_IN)
+                .order_by("-created_at")
+                .first()
+            )
+        
+        if activity:
             return Response(
-                {
-                    "success": True,
-                    "message": "Existing payment found.",
-                    "data": PaymentSerializer(payment).data,
-                },
+                {"success": True, "message": "Payment processed.", "data": WalletActivitySerializer(activity).data},
                 status=status.HTTP_200_OK,
             )
 
-        # Create payment
-        with transaction.atomic():
-
-            payment = initiate_cash_in(
-                user=request.user, 
-                wallet=wallet, 
-                amount=amount,
-                currency=currency,
-                medium=method,
-                phone_number=phone_number,
-                idempotency_key=idempotency_key,
-                )
-
         return Response(
             {
-                "success": True,
-                "message": "Payment initiated successfully.",
-                "data": PaymentSerializer(payment).data,
+                "success": True, 
+                "message": "Payment is still being processed.","data": {
+                    "id":payment.id,
+                    "status": payment.status, "internal_reference": payment.internal_reference,
+                }
             },
-            status=status.HTTP_201_CREATED,
+            status=status.HTTP_202_ACCEPTED,
         )
     
-
 class CashOutView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated
+                        #    IsVerified
+                           ]
 
     def post(self, request):
         idempotency_key = get_idempotency_key(request=request)
 
         wallet = get_or_create_wallet(request.user)
+
+        existing_payment = (
+                Payment.objects
+                .filter(
+                    user=request.user,
+                    idempotency_key=idempotency_key,
+                )
+                .first()
+            )
+        
+        if existing_payment:
+                return Response(
+                    {
+                        "success": True,
+                        "message": "Cash-out already initiated.",
+                        "data": PaymentSerializer(existing_payment).data,
+                    },
+                    status=status.HTTP_200_OK,
+                )
 
         serializer = CashOutSerializer(
             data=request.data,
@@ -176,51 +194,128 @@ class CashOutView(APIView):
         method = serializer.validated_data["method"]
         amount = serializer.validated_data["amount"]
 
-        payment = initiate_cash_out(
-            user=request.user,
-            wallet=wallet,
-            method=method,
-            recipient_reference=phone_number,
-            amount=amount,
-            idempotency_key=idempotency_key,
-            **serializer.validated_data,
-        )
+        payment = Payment.objects.create(
+                    user=request.user,
+                    wallet=wallet,
+                    provider=Payment.Provider.FAPSHI,
+                    method=method,
+                    direction=Payment.Direction.CASH_OUT,
+                    amount=amount,
+                    currency=wallet.currency,
+                    status=Payment.Status.INITIATED,
+                    idempotency_key=idempotency_key,
+                    phone_number=phone_number,
+                    internal_reference=(
+                        f"BOLO-{uuid.uuid4().hex[:12].upper()}"
+                    ),
+                    metadata={
+                        "recipient_reference": phone_number,
+                        "recipient_name": "",
+                    },
+                )
+        
 
         return Response(
             {
                 "success": True,
                 "message": "Cash-out initiated successfully.",
-                "data": PaymentSerializer(payment).data,
+                "data": {
+                    "id":payment.id,
+                    "status": payment.status, "internal_reference": payment.internal_reference,
+                },
             },
             status=status.HTTP_201_CREATED,
         )
     
+class ConfirmCashoutWithPinView(APIView):
+    """
+    POST /api/v1/payments/wallet/cashout/{id}/confirm-pin
+    """
+    permission_classes = [IsAuthenticated
+                        #    IsVerified
+                           ]
 
+    def post(self, request, pk):
+        payment = get_object_or_404(
+            Payment,
+            id=pk,
+            user=request.user,
+            direction=Payment.Direction.CASH_OUT,
+        )     
 
+        serializer = PinCashoutConfirmationSerializer(
+            data=request.data,
+            context= {"request": request, "payment": payment},
+        )
+
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            payment = initiate_cash_out(payment=payment)
+        except InvalidPaymentStateError as exc:
+            return error_response(
+                message=str(exc),
+                status_code=status.HTTP_409_CONFLICT,
+            )
+        except InsufficientFundsError as exc:
+            return error_response(
+                message= str(exc),
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        except CashOutProviderError as exc:
+            return error_response(
+                message=str(exc),
+                status_code=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        activity = (
+                payment.wallet_activities
+                .filter(kind=WalletActivity.Kind.CASH_OUT)
+                .order_by("-created_at")
+                .first()
+            )
+
+        return Response(
+                    {
+                        "success": True,
+                        "message": "Wallet pin verified successfully.",
+                        "data": WalletActivitySerializer(activity).data,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+        
 class TransactionListView(CachedListMixin, ListAPIView):
     serializer_class = TransactionListSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdmin]
     filter_backends = [DjangoFilterBackend, AmountBracketFilterBackend]
     filterset_class = TransactionFilter
-    cache_model_name = "transaction"
+    cache_model_name = "transactions"
 
     def get_queryset(self):
         qs = Transaction.objects.select_related('wallet', 'wallet__user', 'payment')
-        user = self.request.user
-        if user.is_staff or user.is_superuser:
-            return qs
-        return qs.filter(wallet__user=user)
+        return qs
 
 
 class PaymentListView(CachedListMixin, ListAPIView):
     serializer_class = PaymentListSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdmin]
     filter_backends = [DjangoFilterBackend, AmountBracketFilterBackend]
     filterset_class = PaymentFilter
-    cache_model_name = "payment"
+    cache_model_name = "payments"
 
     def get_queryset(self):
         qs = Payment.objects.select_related('user', 'wallet')
+        return qs
+    
+class WalletActivityListView(CachedListMixin, ListAPIView):
+    serializer_class = WalletActivitySerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, AmountBracketFilterBackend]
+    filterset_class = WalletActivityFilter
+    cache_model_name = "wallet-activities"
+
+    def get_queryset(self):
+        qs = WalletActivity.objects.select_related('user', 'wallet')
         user = self.request.user
         if user.is_staff or user.is_superuser:
             return qs

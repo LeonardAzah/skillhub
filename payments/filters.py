@@ -3,7 +3,7 @@ from rest_framework.filters import BaseFilterBackend
 from rest_framework.exceptions import ValidationError
 import django_filters as df
 
-from .models import Transaction, Payment
+from .models import Transaction, Payment, WalletActivity
 
 
 class AmountBracketFilterBackend(BaseFilterBackend):
@@ -56,3 +56,17 @@ class PaymentFilter(df.FilterSet):
     class Meta:
         model = Payment
         fields = ['status', 'provider', 'method', 'direction', 'appointment_id']
+
+class WalletActivityFilter(df.FilterSet):
+    status = df.ChoiceFilter(choices=WalletActivity.Status.choices)
+    kind = df.ChoiceFilter(choices=WalletActivity.Kind.choices)
+    provider = df.ChoiceFilter(field_name="provider__provider", choices=Payment.Provider.choices)
+    method = df.ChoiceFilter(field_name="payment__method", choices=Payment.Method.choices)
+    appointment_id = df.UUIDFilter()
+    created_after = df.IsoDateTimeFilter(field_name='created_at', lookup_expr='gte')
+    created_before = df.IsoDateTimeFilter(field_name='created_at', lookup_expr='lte')
+
+
+    class Meta:
+        model = WalletActivity
+        fields = ['status', 'kind', 'provider', 'method', 'appointment_id']

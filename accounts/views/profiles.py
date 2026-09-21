@@ -175,7 +175,7 @@ class ProvidersView(ListAPIView):
 
     def get_queryset(self):
         return ProviderProfile.objects.filter(
-            user__is_verified=True,
+            is_verified=True,
             user__is_active=True,
         ).select_related("user")
 
@@ -201,8 +201,7 @@ class ProvidersView(ListAPIView):
                 return Response(
                     {"error": "Category not found or inactive."},
                     status=status.HTTP_404_NOT_FOUND,
-                )
-            # .distinct() guards against duplicate rows if a provider is
+                ).distinct() # guards against duplicate rows if a provider is
             # ever linked to the same category more than once.
             qs = qs.filter(provider_categories__category=category).distinct()
 
@@ -222,8 +221,6 @@ class ProvidersView(ListAPIView):
 
         cache.set(cache_key, response.data, PROVIDER_CACHE_TTL)
         return response
-
-    # -- helpers --------------------------------------------------------
 
     def _sort_by_distance(self, qs, data):
         lat_f, lng_f = data["lat"], data["lng"]
@@ -257,6 +254,7 @@ class ProvidersView(ListAPIView):
             "id": str(p.id),
             "full_name": p.full_name or "",
             "bio": p.bio,
+            "profile_picture":p.user.profile_picture,
             "hourly_rate": str(p.hourly_rate) if p.hourly_rate else None,
             "experience_years": p.experience_years,
             "average_rating": str(p.average_rating),

@@ -3,7 +3,6 @@ import uuid
 from decimal import Decimal
 
 from django.core.cache import cache
-from django.utils import timezone
 from rest_framework import serializers
 
 from appointments.models import Appointment
@@ -16,7 +15,9 @@ from .constants import (
     WALLET_PIN_TOKEN_BOOKING,
     WALLET_PIN_TOKEN_WITHDRAWAL,
 )
-from .models import EscrowAccount, Transaction, Wallet, WalletPin, Payment
+from .models import EscrowAccount, Transaction, Wallet, WalletPin, Payment, WalletActivity
+
+from utils.serializers import WalletPinSerializer
 
 PIN_RE = re.compile(r"^\d{4}$")
 
@@ -73,64 +74,6 @@ class SetWalletPinSerializer(serializers.Serializer):
     def save(self) -> WalletPin:
         user = self.context["request"].user
         return WalletPin.create_or_update(user, self.validated_data["new_pin"])
-
-
-class VerifyWalletPinSerializer(serializers.Serializer):
-    """
-    POST /api/v1/wallet/pin/verify/
-    Verifies PIN and stores two short-lived cache tokens:
-      wallet_pin_verified:{seeker_id}     → consumed by booking creation
-      wallet_pin_withdrawal:{user_id}     → consumed by withdrawal request
-
-    Both tokens TTL = 5 minutes and are single-use.
-    """
-    pin     = serializers.CharField(write_only=True)
-    purpose = serializers.ChoiceField(
-        choices=["booking", "withdrawal", "all"],
-        default="all",
-        help_text="Which operation this verification authorises.",
-    )
-
-    def validate_pin(self, v): return _validate_pin_format(v)
-
-    def validate(self, attrs):
-        user = self.context["request"].user
-        if not hasattr(user, "wallet_pin") or not user.wallet_pin.is_set:
-            raise serializers.ValidationError(
-                "You have not set a wallet PIN yet. Use POST /api/v1/wallet/pin/set/ first."
-            )
-        try:
-            ok = user.wallet_pin.verify(attrs["pin"])
-        except ValueError as e:
-            raise serializers.ValidationError(str(e))
-        if not ok:
-            remaining = WalletPin.MAX_ATTEMPTS - user.wallet_pin.failed_attempts
-            raise serializers.ValidationError(
-                f"Incorrect PIN. {max(0, remaining)} attempt(s) remaining before lockout."
-            )
-        return attrs
-
-    def save(self) -> dict:
-        user    = self.context["request"].user
-        purpose = self.validated_data["purpose"]
-        tokens  = {}
-
-        if purpose in ("booking", "all"):
-            # Shared with appointments module via WALLET_PIN_TOKEN_BOOKING prefix
-            seeker_id = None
-            if hasattr(user, "seeker_profile"):
-                seeker_id = user.seeker_profile.id
-            if seeker_id:
-                key = f"{WALLET_PIN_TOKEN_BOOKING}:{seeker_id}"
-                cache.set(key, True, WALLET_PIN_TTL_BOOKING)
-                tokens["booking_token_ttl"] = WALLET_PIN_TTL_BOOKING
-
-        if purpose in ("withdrawal", "all"):
-            key = f"{WALLET_PIN_TOKEN_WITHDRAWAL}:{user.id}"
-            cache.set(key, True, WALLET_PIN_TTL_WITHDRAWAL)
-            tokens["withdrawal_token_ttl"] = WALLET_PIN_TTL_WITHDRAWAL
-
-        return tokens
 
 
 class WalletPinStatusSerializer(serializers.Serializer):
@@ -273,6 +216,17 @@ class TransactionSerializer(serializers.ModelSerializer):
                 field.read_only = True
             return fields
 
+class WalletActivitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WalletActivity
+        fields = "__all__"
+
+        def get_fields(Self):
+            fields = super().get_fields()
+            for field in fields.values():
+                field.read_only = True
+            return fields
+
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Payment
@@ -375,7 +329,7 @@ class CashOutSerializer(serializers.Serializer):
 
         has_dispute = (
             Appointment.objects.filter(
-                customer__user=user,
+                customer=user,
                 status=Appointment.Status.DISPUTED,
             ).exists()
             or
@@ -393,6 +347,29 @@ class CashOutSerializer(serializers.Serializer):
 
         return attrs
 
+
+class PinCashoutConfirmationSerializer(WalletPinSerializer):
+
+    def validate(self, attrs):
+        payment = self.context["payment"]
+
+        if payment.status != Payment.Status.INITIATED:
+            raise serializers.ValidationError(
+                f"This payout is in '{payment.status}' status "
+                "and does not require PIN confirmation."
+            )
+
+        try:
+            from payments.services.pin import verify_wallet_pin
+            verify_wallet_pin(
+                self.context["request"].user,
+                attrs["pin"],
+            )
+        except ValueError as exc:
+            raise serializers.ValidationError({"pin": str(exc)})
+
+        return attrs
+    
 
 class EscrowSerializer(serializers.ModelSerializer):
     class Meta:

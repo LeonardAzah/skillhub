@@ -7,8 +7,8 @@ from rest_framework.views import APIView
 from utils.events import EventType
 from notifications.publisher import publish_event
 
-from ..constants import WALLET_PIN_TOKEN_BOOKING, WALLET_PIN_TOKEN_WITHDRAWAL
-from ..serializers import SetWalletPinSerializer, VerifyWalletPinSerializer
+from ..constants import WALLET_PIN_TOKEN_BOOKING
+from ..serializers import SetWalletPinSerializer
 
 
 class SetWalletPinView(APIView):
@@ -38,45 +38,6 @@ class SetWalletPinView(APIView):
              "message": "Wallet PIN set successfully.",
             "data":{}
              },
-            status=status.HTTP_200_OK,
-        )
-
-
-class VerifyWalletPinView(APIView):
-    """
-    POST /api/v1/wallet/pin/verify/
-    Verify the wallet PIN and issue short-lived authorisation tokens.
-
-    Body: { pin, purpose }
-    purpose: "booking" | "withdrawal" | "all"  (default: "all")
-
-    On success stores:
-      wallet_pin_verified:{seeker_id}     TTL = 5 min  (for booking)
-      wallet_pin_withdrawal:{user_id}     TTL = 5 min  (for withdrawal)
-
-    These tokens are single-use — consumed by the operation that requires them.
-    """
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        serializer = VerifyWalletPinSerializer(
-            data=request.data, context={"request": request}
-        )
-        serializer.is_valid(raise_exception=True)
-        tokens = serializer.save()
-
-        publish_event(EventType.WALLET_PIN_VERIFIED, {
-            "user_id": str(request.user.id),
-            "purpose": request.data.get("purpose", "all"),
-        })
-
-        return Response(
-            {
-                "success":True,
-                "message": "PIN verified successfully.",
-                **tokens,
-                "data":{}
-            },
             status=status.HTTP_200_OK,
         )
 

@@ -69,7 +69,8 @@ class FapshiClient:
                 data.get(
                     "message",
                     "Fapshi request failed.",
-                )
+                ),
+                status_code=response.status_code,
             )
 
         data["statusCode"] = response.status_code

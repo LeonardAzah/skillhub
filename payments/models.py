@@ -34,7 +34,7 @@ class WalletPin(models.Model):
     These keys are read (and consumed) by the relevant operation serializers.
     """
 
-    MAX_ATTEMPTS    = 5
+    MAX_ATTEMPTS    = 3
     LOCKOUT_MINUTES = 15
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -468,6 +468,12 @@ class PaymentGatewayLog(models.Model):
     """Audit trail for every webhook received from the payment gateway.idempotency + replay protection."""
 
     id               = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    provider_transaction_id = models.CharField(
+            max_length=255,
+            blank=True,
+            default="",
+            db_index=True,
+        )
     gateway          = models.CharField(max_length=50, default="fapshi",
                                         help_text=_("Gateway name: fapshi, tangentopay, etc."))
     event_type       = models.CharField(max_length=100)
@@ -484,6 +490,77 @@ class PaymentGatewayLog(models.Model):
     class Meta:
         verbose_name = _("payment gateway log")
         ordering = ["-received_at"]
+        constraints = [
+        models.UniqueConstraint(
+            fields=["gateway", "provider_transaction_id"],
+            name="gateway_log_unique",
+        )
+    ]
 
     def __str__(self):
         return f"GatewayLog[{self.gateway}] {self.event_type} — {'ok' if self.processed else 'pending'}"
+
+
+class WalletActivity(models.Model):
+    """
+    One row per user-facing wallet event. This is what apps display
+    Transaction stays the immutable double-entry ledger, this is its
+    human-readable projection. Written in the same atomic block as the
+    ledger it summarizes.
+    """
+
+    class Kind(models.TextChoices):
+        CASH_IN = "cash_in", _("Wallet Top-up")
+        CASH_OUT = "cash_out", _("Withdrawal")
+        ESCROW_HELD = "escrow_held", _("Payment Held for Appointment")
+        ESCROW_RELEASED = "escrow_released", _("Payment Sent")
+        ESCROW_REFUNDED = "escrow_refunded", _("Refund")
+        EARNING = "earning", _("Earning Received")
+
+    class Status(models.TextChoices):
+        PENDING = "pending", _("Pending")
+        COMPLETED = "completed", _("Completed")
+        FAILED = "failed", _("Failed")
+        EXPIRED = "expired", _("Expired")
+
+    id = models.UUIDField(primary_key=True,default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        _setting("AUTH_USER_MODEL", "accounts.User"),
+        on_delete=models.PROTECT,
+        related_name="wallet_activity",
+    )
+
+    wallet = models.ForeignKey(
+        Wallet,
+        on_delete=models.PROTECT,
+        related_name="activity"
+    )
+
+    kind = models.CharField(max_length=20, choices=Kind.choices, db_index=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.COMPLETED)
+
+
+    amount = models.DecimalField(max_digits=15, decimal_places=2)
+    currency = models.CharField(max_length=3, default="XAF")
+    balance_after = models.DecimalField(max_digits=15, decimal_places=2)
+
+    title = models.CharField(max_length=100)
+    subtitle = models.CharField(max_length=255, blank=True, default="")
+
+    appointment_id = models.UUIDField(null=True, blank=True, db_index=True)
+    payment = models.ForeignKey(Payment, null=True, blank=True, on_delete=models.SET_NULL, related_name="wallet_activities")
+
+    related_transactions = models.ManyToManyField(Transaction, related_name="activity_entries")
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=[
+                    "user",
+                    "created_at",
+                ]
+            )
+        ]

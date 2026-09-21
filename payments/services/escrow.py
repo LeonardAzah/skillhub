@@ -9,7 +9,7 @@ from notifications.publisher import publish_event
 
 from ._helpers import calculate_fee, find_existing, get_platform_wallet, get_wallet
 from ..constants import PLATFORM_COMMISSION_RATE
-from ..models import EscrowAccount, Transaction, Wallet
+from ..models import EscrowAccount, Transaction, Wallet, WalletActivity
 
 
 @db_transaction.atomic
@@ -57,7 +57,7 @@ def hold_escrow(appointment_id: str, seeker_user_id: str, provider_user_id: str,
         description=f"Escrow hold for appointment {appointment_id}",
     )
 
-    Transaction.objects.create(
+    hold_credit = Transaction.objects.create(
         wallet=seeker_wallet,
         transaction_type=Transaction.Type.ESCROW_HOLD,
         account=Transaction.LedgerAccount.ESCROW,
@@ -82,6 +82,20 @@ def hold_escrow(appointment_id: str, seeker_user_id: str, provider_user_id: str,
     Appointment.objects.filter(id=appointment_id).update(
         escrow_transaction_id=hold_debit.id
     )
+
+    activity = WalletActivity.objects.create(
+        user=seeker_wallet.user,
+        Wallet=seeker_wallet,
+        kind=WalletActivity.Kind.ESCROW_HELD,
+        amount=-amount,
+        currency=seeker_wallet.currency,
+        balance_after=seeker_wallet.balance,
+        title="Payment held for appointment",
+        appointment_id=appointment_id
+    )
+
+    activity.related_transactions.set([hold_debit, hold_credit])
+
 
     publish_event(EventType.ESCROW_HELD, {
         "appointment_id": str(appointment_id),
@@ -124,9 +138,9 @@ def release_escrow(appointment_id: str, idempotency_key: str) -> Transaction:
     seeker_wallet.escrow_balance -= escrow.amount
     seeker_wallet.save(update_fields=["escrow_balance", "updated_at"])
 
-    Transaction.objects.create(
+    release_debit = Transaction.objects.create(
         wallet=seeker_wallet,
-        transaction_type=Transaction.Type.ESCROW_RELEASE,
+        transaction_type=Transaction.Kind.ESCROW_RELEASE,
         account=Transaction.LedgerAccount.ESCROW,
         amount=-escrow.amount,
         balance_after=seeker_wallet.escrow_balance,
@@ -143,7 +157,7 @@ def release_escrow(appointment_id: str, idempotency_key: str) -> Transaction:
     # Release transaction
     release_txn = Transaction.objects.create(
         wallet=provider_wallet,
-        transaction_type=Transaction.Type.ESCROW_RELEASE,
+        transaction_type=Transaction.Kind.ESCROW_RELEASE,
         account=Transaction.LedgerAccount.AVAILABLE,
         amount=net_amount,
         balance_after=provider_wallet.balance,
@@ -160,7 +174,7 @@ def release_escrow(appointment_id: str, idempotency_key: str) -> Transaction:
         platform_wallet.save(update_fields=["balance", "total_earned", "updated_at"])
         Transaction.objects.create(
             wallet=platform_wallet,
-            transaction_type=Transaction.Type.PLATFORM_FEE,
+            transaction_type=Transaction.Kind.PLATFORM_FEE,
             account=Transaction.LedgerAccount.AVAILABLE,
             amount=escrow.platform_fee,
             balance_after=platform_wallet.balance,
@@ -175,6 +189,32 @@ def release_escrow(appointment_id: str, idempotency_key: str) -> Transaction:
     escrow.status               = EscrowAccount.Status.RELEASED
     escrow.release_transaction  = release_txn
     escrow.save(update_fields=["status", "release_transaction", "updated_at"])
+
+    seeker_activity = WalletActivity.objects.create(
+            user=seeker_wallet.user,
+            Wallet=seeker_wallet,
+            kind=WalletActivity.Kind.ESCROW_RELEASED,
+            amount=escrow.amount,
+            currency=seeker_wallet.currency,
+            balance_after=seeker_wallet.balance,
+            title="Payment sent to provider",
+            appointment_id=appointment_id
+        )
+    
+    seeker_activity.related_transactions.set([release_debit])
+
+    provider_activity = WalletActivity.objects.create(
+        user=provider_wallet.user,
+        Wallet=provider_wallet,
+        kind=WalletActivity.Kind.EARNING,
+        amount=net_amount,
+        currency=provider_wallet.currency,
+        balance_after=provider_wallet.balance,
+        title="Earning received",
+        appointment_id=appointment_id,
+    )
+
+    provider_activity.related_transactions.set([release_txn])
 
     publish_event(EventType.ESCROW_RELEASED, {
         "appointment_id": str(appointment_id),
@@ -219,7 +259,7 @@ def refund_escrow(appointment_id: str, idempotency_key: str,
     seeker_wallet.total_spent    = max(Decimal("0.00"), seeker_wallet.total_spent - refund_amount)
     seeker_wallet.save(update_fields=["balance", "escrow_balance", "total_spent", "updated_at"])
 
-    Transaction.objects.create(
+    refund_debit = Transaction.objects.create(
         wallet=seeker_wallet,
         transaction_type=Transaction.Type.ESCROW_REFUND,
         account=Transaction.LedgerAccount.ESCROW,
@@ -241,6 +281,18 @@ def refund_escrow(appointment_id: str, idempotency_key: str,
         description=f"Escrow refund for appointment {appointment_id}",
     )
 
+    seeker_activity = WalletActivity.objects.create(
+        user=seeker_wallet.user,
+        wallet=seeker_wallet,
+        kind=WalletActivity.Kind.ESCROW_REFUNDED,
+        amount=refund_amount,
+        currency=seeker_wallet.currency,
+        balance_after=seeker_wallet.balance,
+        title="Refund received",
+        appointment_id=appointment_id,
+    )
+    seeker_activity.related_transactions.set([refund_debit, refund_txn])
+
     # If partial refund, release remainder to provider
     if partial_amount and partial_amount < escrow.amount:
         provider_amount = escrow.amount - partial_amount
@@ -249,7 +301,7 @@ def refund_escrow(appointment_id: str, idempotency_key: str,
         provider_wallet.total_earned += provider_amount
         provider_wallet.save(update_fields=["balance", "total_earned", "updated_at"])
 
-        Transaction.objects.create(
+        refund_credit = Transaction.objects.create(
             wallet=provider_wallet,
             transaction_type=Transaction.Type.ESCROW_RELEASE,
             account=Transaction.LedgerAccount.AVAILABLE,
@@ -263,6 +315,18 @@ def refund_escrow(appointment_id: str, idempotency_key: str,
         seeker_wallet_locked = Wallet.objects.select_for_update().get(id=escrow.seeker_wallet_id)
         seeker_wallet_locked.escrow_balance -= remaining
         seeker_wallet_locked.save(update_fields=["escrow_balance", "updated_at"])
+
+        provider_activity = WalletActivity.objects.create(
+            user=provider_wallet.user,
+            Wallet=provider_wallet,
+            kind=WalletActivity.Kind.EARNING,
+            amount=provider_amount,
+            currency=provider_wallet.currency,
+            balance_after=provider_wallet.balance,
+            title="Cancellation compensation received",
+            appointment_id=appointment_id,
+        )
+        provider_activity.related_transactions.set([refund_credit])
 
     escrow.status               = EscrowAccount.Status.REFUNDED
     escrow.release_transaction  = refund_txn

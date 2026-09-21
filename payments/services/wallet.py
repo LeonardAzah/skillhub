@@ -9,7 +9,7 @@ from notifications.publisher import publish_event
 
 from ._helpers import get_clearing_wallet
 
-from ..models import Transaction, Wallet, Payment
+from ..models import Transaction, Wallet, Payment, WalletActivity
 from ..exceptions import CashOutServiceError
 
 logger = logging.getLogger(__name__)
@@ -40,20 +40,32 @@ def process_cashin(payment: Payment) -> Transaction:
 
     Safe to call multiple times.
     """
-    existing_transaction = (
-        Transaction.objects
-        .filter(
-            payment=payment,
-            transaction_type=Transaction.Type.CASH_IN,
-            account=Transaction.LedgerAccount.AVAILABLE,
+
+    wallet = (
+            Wallet.objects
+            .select_for_update()
+            .get(pk=payment.wallet_id)
         )
-        .first()
-    )
-
+    
+    existing_transaction = (
+            Transaction.objects
+            .filter(
+                payment=payment,
+                transaction_type=Transaction.Type.CASH_IN,
+                account=Transaction.LedgerAccount.AVAILABLE,
+            )
+            .first()
+        )
+    
     if existing_transaction:
-        logger.info("Duplicate cash-in ignored", extra={"key": payment.idempotency_key})
-        return existing_transaction
-
+            logger.info("Duplicate cash-in ignored", extra={"key": payment.idempotency_key})
+            return existing_transaction
+    
+    if not wallet.is_active:
+            raise ValueError(
+                "Wallet is frozen. Contact support."
+            )
+    
     if payment.status == Payment.Status.COMPLETED:
         raise ValueError(
             "Payment is already completed but has no ledger transaction."
@@ -64,18 +76,6 @@ def process_cashin(payment: Payment) -> Transaction:
             "Payment is not a cash-in payment."
         )
 
-
-    wallet = (
-        Wallet.objects
-        .select_for_update()
-        .get(pk=payment.wallet.id)
-    )
-
-    if not wallet.is_active:
-        raise ValueError(
-            "Wallet is frozen. Contact support."
-        )
-
     clearing_wallet = get_clearing_wallet()
     amount = payment.amount
     balance_before = wallet.balance
@@ -84,7 +84,7 @@ def process_cashin(payment: Payment) -> Transaction:
     clearing_wallet.balance -= amount
     clearing_wallet.save(update_fields=["balance", "updated_at"])
 
-    Transaction.objects.create(
+    clearing_txn = Transaction.objects.create(
         wallet=clearing_wallet,
         transaction_type=Transaction.Type.CASH_IN,
         account=Transaction.LedgerAccount.CLEARING,
@@ -131,6 +131,21 @@ def process_cashin(payment: Payment) -> Transaction:
         ]
     )
 
+    activity = WalletActivity.objects.create(
+        user=wallet.user,
+        wallet=wallet,
+        kind=WalletActivity.Kind.CASH_IN,
+        amount=amount,
+        currency=payment.currency,
+        balance_after=wallet.balance,
+        status=WalletActivity.Status.COMPLETED,
+        title="Wallet top-up",
+        subtitle=f"via {payment.get_provider_display()}",
+        payment=payment,
+    )
+
+    activity.related_transactions.set([clearing_txn, txn])
+
     publish_event(
         EventType.WALLET_CREDITED,
         {
@@ -170,6 +185,18 @@ def process_failed_payment(
         ]
     )
 
+    WalletActivity.objects.create(
+        user=payment.user,
+        wallet=payment.wallet,
+        kind=WalletActivity.Kind.CASH_IN,
+        amount=payment.amount,
+        status=WalletActivity.Status.FAILED,
+        currency=payment.currency,
+        balance_after=payment.wallet.balance,
+        title="Wallet top-up failed",
+        subtitle=f"via {payment.get_provider_display()}",
+        payment=payment,
+    )
     return payment
 
 
@@ -198,6 +225,18 @@ def process_expired_payment(
         ]
     )
 
+    WalletActivity.objects.create(
+        user=payment.user,
+        wallet=payment.wallet,
+        kind=WalletActivity.Kind.CASH_IN,
+        amount=payment.amount,
+        status=WalletActivity.Status.EXPIRED,
+        currency=payment.currency,
+        balance_after=payment.wallet.balance,
+        title="Wallet top-up expired",
+        subtitle=f"via {payment.get_provider_display()}",
+        payment=payment,
+    )
     return payment
 
 
@@ -212,6 +251,10 @@ def complete_cash_out(payment: Payment) -> Transaction:
 
     Safe to call multiple times.
     """
+    wallet = Wallet.objects.select_for_update().get(pk=payment.wallet_id)
+    if not wallet.is_active:
+        raise ValueError("Wallet is frozen. Contact support.")
+
     existing = (
         Transaction.objects
         .filter(
@@ -229,10 +272,6 @@ def complete_cash_out(payment: Payment) -> Transaction:
         raise ValueError("Payment is already completed but has no ledger transaction.")
     if payment.direction != Payment.Direction.CASH_OUT:
         raise ValueError("Payment is not a cash-out payment.")
-
-    wallet = Wallet.objects.select_for_update().get(pk=payment.wallet.id)
-    if not wallet.is_active:
-        raise ValueError("Wallet is frozen. Contact support.")
 
     amount = payment.amount
     if wallet.balance < amount:
@@ -267,7 +306,7 @@ def complete_cash_out(payment: Payment) -> Transaction:
     clearing_wallet.balance += amount
     clearing_wallet.save(update_fields=["balance", "updated_at"])
 
-    Transaction.objects.create(
+    clearing_txn = Transaction.objects.create(
         wallet=clearing_wallet,
         transaction_type=Transaction.Type.CASH_OUT,
         account=Transaction.LedgerAccount.CLEARING,
@@ -281,6 +320,19 @@ def complete_cash_out(payment: Payment) -> Transaction:
     payment.status = Payment.Status.COMPLETED
     payment.completed_at = timezone.now()
     payment.save(update_fields=["status", "completed_at", "updated_at"])
+
+    activity = WalletActivity.objects.create(
+        user=wallet.user,
+        wallet=wallet,
+        kind=WalletActivity.Kind.CASH_OUT,
+        amount=- amount,
+        currency=payment.currency,
+        balance_after=wallet.balance,
+        title="withdrawal",
+        subtitle=f"via {payment.get_provider_display()}",
+        payment=payment,
+    )
+    activity.related_transactions.set([txn, clearing_txn])
 
     publish_event(EventType.WALLET_DEBITED, {
         "user_id":        str(payment.user_id),
@@ -305,6 +357,8 @@ def release_cashout_reservation(
 
     Idempotent and concurrency-safe.
     """
+
+    payment = Payment.objects.select_for_update().get(pk=payment.id)
 
     if payment.direction != Payment.Direction.CASH_OUT:
         raise CashOutServiceError("Payment is not a cash-out.")
@@ -341,6 +395,20 @@ def process_cashout_failed(
     payment: Payment,
     reason: str = "",
 ) -> Payment:
+     
+    WalletActivity.objects.create(
+        user=payment.user,
+        wallet=payment.wallet,
+        kind=WalletActivity.Kind.CASH_OUT,
+        amount=payment.amount,
+        status=WalletActivity.Status.FAILED,
+        currency=payment.currency,
+        balance_after=payment.wallet.balance,
+        title="Wallet cash-out failed",
+        subtitle=f"via {payment.get_provider_display()}",
+        payment=payment,
+    )
+     
     return release_cashout_reservation(
         payment,
         status=Payment.Status.FAILED,
@@ -352,6 +420,20 @@ def process_cashout_expired(
     payment: Payment,
     reason: str = "",
 ) -> Payment:
+
+    WalletActivity.objects.create(
+            user=payment.user,
+            wallet=payment.wallet,
+            kind=WalletActivity.Kind.CASH_OUT,
+            amount=payment.amount,
+            status=WalletActivity.Status.EXPIRED,
+            currency=payment.currency,
+            balance_after=payment.wallet.balance,
+            title="Wallet cash-out expired",
+            subtitle=f"via {payment.get_provider_display()}",
+            payment=payment,
+        )
+    
     return release_cashout_reservation(
         payment,
         status=Payment.Status.EXPIRED,

@@ -6,9 +6,6 @@ from .models import Appointment
 
 from utils.exceptions import error_response
 
-def _wallet_pin_token_key(seeker_id) -> str:
-    return f"{WALLET_PIN_TOKEN_PREFIX}:{seeker_id}"
-
 def _appointment_payload(appointment: Appointment) -> dict:
     return {
         "appointment_id": str(appointment.id),
